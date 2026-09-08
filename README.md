@@ -15,6 +15,8 @@ A modern, Linux-first YouTube Music player built with GTK4 and Libadwaita.
 [![Flatpak CI](https://img.shields.io/github/actions/workflow/status/m-obeid/Mixtapes/build-flatpak.yml?label=Flatpak%20Build)](https://github.com/m-obeid/Mixtapes/actions/workflows/build-flatpak.yml)
 [![Windows Build](https://img.shields.io/github/actions/workflow/status/m-obeid/Mixtapes/build-windows.yml?label=Windows%20Build)](https://github.com/m-obeid/Mixtapes/actions/workflows/build-windows.yml)
 [![Windows Download](https://img.shields.io/badge/Windows-Download%20Installer-blue?logo=windows)](https://nightly.link/m-obeid/Mixtapes/workflows/build-windows/main/mixtapes-windows-x86_64-setup.zip)
+<br>
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M8P12091FB)
 
 <br clear="both"/>
 
