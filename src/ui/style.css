@@ -649,7 +649,7 @@ window > windowhandle,
 
 
 .lyrics-line .lyrics-line-sub {
-  font-weight: 500;
+  font-weight: 600;
   color: alpha(@accent_color, 0.2);
 }
 
