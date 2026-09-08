@@ -803,6 +803,7 @@ class MainWindow(Adw.ApplicationWindow):
         return {
             "blurred_background": bool(prefs.get("blurred_background", False)),
             "dynamic_accent": bool(prefs.get("dynamic_accent", False)),
+            "tinted_background": bool(prefs.get("tinted_background", False)),
         }
 
     def _on_metadata_for_appearance(self, player, title, artist,
@@ -880,8 +881,8 @@ class MainWindow(Adw.ApplicationWindow):
             # (the cover color arrives on a worker thread).
             self._accent_override = None
             self._update_dynamic_accent(self._last_cover_url)
-        self._refresh_derived_colors()
-
+        if prefs["tinted_background"]:
+            self._refresh_derived_colors()
     def _update_blurred_background(self, thumb_url):
         from ui.cover_effects import get_blurred_cover
 
@@ -983,69 +984,109 @@ class MainWindow(Adw.ApplicationWindow):
         return color_utils.WCAG_AA
 
     def _set_dynamic_accent(self, rgb):
-        """Push an accent override into the dynamic accent CSS provider.
-
-        libadwaita splits the accent: `accent_bg_color` fills buttons,
-        `accent_color` is the standalone text variant. The old code
-        overrode both with the raw cover color and lost the split, so a
-        pale-yellow cover painted near-invisible text.
-
-        Rebuilds both in OkLCh. The fill needs 3:1 as a shape, the
-        standalone variant needs to be readable as text.
-        """
+        prefs = self._read_appearance_prefs()
+        
         is_dark = self._is_dark()
-        target = self._contrast_target()
-        # Bases libadwaita paints under the accent wash below.
-        bg_base = "#242424" if is_dark else "#fafafa"
-        view_base = "#1e1e1e" if is_dark else "#ffffff"
-        card_base = "#363636" if is_dark else "#ffffff"
-        sidebar_base = "#2e2e2e" if is_dark else "#ebebeb"
 
-        # 1. The fill. Keep inside a real accent's lightness band, then
-        #    separate the shape from the window behind it.
         solid = color_utils.clamp_lightness(rgb, 0.45, 0.85)
         solid = color_utils.ensure_contrast(
-            solid, color_utils.from_hex(bg_base), 3.0
+            solid, color_utils.from_hex("#242424" if is_dark else "#fafafa"), 3.0
         )
-        # 2. The standalone text variant. The accent tints the view
-        #    background below, so mix it the same way first.
         view_bg = color_utils.mix(
-            color_utils.from_hex(view_base), solid, 0.08
+            color_utils.from_hex("#1e1e1e" if is_dark else "#ffffff"), solid, 0.08
         )
-        standalone = color_utils.ensure_contrast(solid, view_bg, target)
-        # 3. Label color for anything drawn on the fill.
-        fg = color_utils.best_foreground(solid)
+        
+        standalone = color_utils.ensure_contrast(solid, view_bg, self._contrast_target())
+        accent_color = color_utils.to_css(solid)
+        tinted = prefs.get("dynamic_accent", False) and prefs.get("tinted_background", False)
+        tint_vars = ""
 
-        solid_css = color_utils.to_css(solid)
-        # Wash a little accent into the bg tokens so plain GTK surfaces
-        # (dialogs, popovers) pick up the cover hue. Around 10% stays
-        # cohesive without competing with the accent.
-        css = (
-            f"@define-color accent_color {color_utils.to_css(standalone)};\n"
-            f"@define-color accent_bg_color {solid_css};\n"
-            f"@define-color accent_fg_color {color_utils.to_css(fg)};\n"
-            f"@define-color window_bg_color mix({bg_base}, {solid_css}, 0.10);\n"
-            f"@define-color view_bg_color mix({view_base}, {solid_css}, 0.08);\n"
-            f"@define-color card_bg_color mix({card_base}, {solid_css}, 0.08);\n"
-            f"@define-color popover_bg_color mix({card_base}, {solid_css}, 0.10);\n"
-            f"@define-color dialog_bg_color mix({bg_base}, {solid_css}, 0.10);\n"
-            f"@define-color headerbar_bg_color mix({bg_base}, {solid_css}, 0.10);\n"
-            f"@define-color sidebar_bg_color mix({sidebar_base}, {solid_css}, 0.10);\n"
-            f"@define-color sidebar_backdrop_color mix({sidebar_base}, {solid_css}, 0.10);\n"
-            f"@define-color secondary_sidebar_bg_color mix({sidebar_base}, {solid_css}, 0.10);\n"
-            f"@define-color secondary_sidebar_backdrop_color mix({sidebar_base}, {solid_css}, 0.10);\n"
-        )
+        if tinted:
+            if is_dark:
+                tint_vars = """
+                @define-color window_bg_color mix(#111113, @accent_bg_color, 0.10);
+                @define-color view_bg_color mix(#0e0e10, @accent_bg_color, 0.10);
+                @define-color headerbar_bg_color mix(#171719, @accent_bg_color, 0.10);
+                @define-color headerbar_backdrop_color mix(#111113, @accent_bg_color, 0.10);
+                @define-color popover_bg_color mix(#1b1b1d, @accent_bg_color, 0.10);
+                @define-color dialog_bg_color mix(#1b1b1d, @accent_bg_color, 0.10);
+                @define-color card_bg_color mix(rgba(255, 255, 255, 0.08), @accent_bg_color, 0.10);
+                @define-color sidebar_bg_color mix(#171719, @accent_bg_color, 0.10);
+                @define-color sidebar_backdrop_color mix(#141416, @accent_bg_color, 0.10);
+                @define-color sidebar_border_color mix(rgba(0, 0, 0, 0.36), @accent_bg_color, 0.10);
+                @define-color secondary_sidebar_bg_color mix(#141416, @accent_bg_color, 0.10);
+                @define-color secondary_sidebar_backdrop_color mix(#121214, @accent_bg_color, 0.10);
+                @define-color secondary_sidebar_border_color mix(rgba(0, 0, 0, 0.25), @accent_bg_color, 0.10);
+    
+                @define-color panel_bg_color @window_bg_color;
+                @define-color panel_button_bg_color transparent;
+                @define-color panel_hover_bg_color @card_bg_color;
+    
+                @define-color theme_bg_color @window_bg_color;
+                @define-color theme_base_color @view_bg_color;
+                @define-color theme_selected_bg_color @accent_bg_color;
+                """
+            else:
+                tint_vars = """
+                @define-color window_bg_color mix(#fafafb, @accent_bg_color, 0.12);
+                @define-color view_bg_color mix(#ffffff, @accent_bg_color, 0.12);
+                @define-color headerbar_bg_color mix(#ffffff, @accent_bg_color, 0.12);
+                @define-color headerbar_backdrop_color mix(#fafafb, @accent_bg_color, 0.12);
+                @define-color popover_bg_color mix(#ffffff, @accent_bg_color, 0.12);
+                @define-color dialog_bg_color mix(#fafafb, @accent_bg_color, 0.12);
+                @define-color card_bg_color mix(#ffffff, @accent_bg_color, 0.06);
+                @define-color sidebar_bg_color mix(#ebebed, @accent_bg_color, 0.12);
+                @define-color sidebar_backdrop_color mix(#f2f2f4, @accent_bg_color, 0.12);
+                @define-color sidebar_border_color mix(rgba(0, 0, 3, 0.07), @accent_bg_color, 0.12);
+                @define-color secondary_sidebar_bg_color mix(#f3f3f5, @accent_bg_color, 0.12);
+                @define-color secondary_sidebar_backdrop_color mix(#f6f6fa, @accent_bg_color, 0.12);
+                @define-color secondary_sidebar_border_color mix(rgba(0, 0, 0, 0.07), @accent_bg_color, 0.12);
+    
+                @define-color panel_bg_color @window_bg_color;
+                @define-color panel_button_bg_color transparent;
+                @define-color panel_hover_bg_color @card_bg_color;
+    
+                @define-color theme_bg_color @window_bg_color;
+                @define-color theme_base_color @view_bg_color;
+                @define-color theme_selected_bg_color @accent_bg_color;
+                """
+
+        css = f"""
+        @define-color accent_bg_color {accent_color};
+        @define-color accent_color {standalone};
+
+        {tint_vars}
+
+        toast {{
+            background-color: mix(#28282a, @accent_bg_color, 0.12);
+            color: #ffffff;
+        }}
+
+        toggle:checked {{
+            background-color: @card_bg_color;
+        }}
+
+        .inline {{
+            background-color: rgba(0, 0, 0, 0);
+        }}
+
+        banner {{ --banner-color: mix(#3e3e42, @accent_bg_color, 0.12); }}
+        """
+
         try:
+            self.add_css_class("tinted")
             self._dynamic_accent_css.load_from_string(css)
         except Exception as e:
             print(f"[appearance] dynamic accent CSS load failed: {e}")
             return
+
         self._accent_override = (solid, standalone, view_bg)
         self._refresh_derived_colors()
 
     def _clear_dynamic_accent(self):
         try:
             self._dynamic_accent_css.load_from_string("")
+            self.remove_css_class("tinted")
         except Exception:
             pass
         self._accent_override = None
@@ -2601,20 +2642,37 @@ class MainWindow(Adw.ApplicationWindow):
 
         blur_row.connect("notify::active", on_blur_toggled)
         appearance_group.add(blur_row)
-
-        accent_row = Adw.SwitchRow()
+        is_dynamic_active = bool(_prefs.get("dynamic_accent", False))
+        
+        accent_row = Adw.ExpanderRow(
+            show_enable_switch=True
+        )
         accent_row.set_title("Dynamic Cover Color")
         accent_row.set_subtitle(
             "Match the app accent color to the current track's cover"
         )
-        accent_row.set_active(bool(_prefs.get("dynamic_accent", False)))
+        # Liga o switch
+        accent_row.set_enable_expansion(is_dynamic_active)
+        # Abre a lista de opções filhas se estiver ativo
+        accent_row.set_expanded(is_dynamic_active)
 
-        def on_accent_toggled(switch, pspec):
-            on = switch.get_active()
+        tinted_row = Adw.SwitchRow()
+        tinted_row.set_title("Tinted Background")
+        tinted_row.set_subtitle(
+            "Tint the app background with accent color"
+        )
+        tinted_row.set_active(bool(_prefs.get("tinted_background", False)))
+
+        def on_accent_toggled(row, pspec):
+            on = row.get_enable_expansion()
+            # Garante que expande ao ligar e recolhe ao desligar
+            row.set_expanded(on)
+
             _prefs["dynamic_accent"] = on
             os.makedirs(os.path.dirname(_prefs_path), exist_ok=True)
             with open(_prefs_path, "w") as f:
                 _json.dump(_prefs, f)
+
             if on:
                 target = self._last_cover_url or getattr(self.player, "mpris_art_url", None)
                 if target:
@@ -2622,8 +2680,22 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._clear_dynamic_accent()
 
-        accent_row.connect("notify::active", on_accent_toggled)
+        def on_tinted_toggled(switch, pspec):
+            on = switch.get_active()
+            _prefs["tinted_background"] = on
+            os.makedirs(os.path.dirname(_prefs_path), exist_ok=True)
+            with open(_prefs_path, "w") as f:
+                _json.dump(_prefs, f)
+
+            target = self._last_cover_url or getattr(self.player, "mpris_art_url", None)
+            if target and _prefs.get("dynamic_accent", False):
+                self._update_dynamic_accent(target)
+
+        accent_row.connect("notify::enable-expansion", on_accent_toggled)
+        tinted_row.connect("notify::active", on_tinted_toggled)
+
         appearance_group.add(accent_row)
+        accent_row.add_row(tinted_row)
 
         # ── Visualizer group ────────────────────────────────────────────
         viz_group = Adw.PreferencesGroup()

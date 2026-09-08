@@ -603,10 +603,10 @@ class LyricRow(Gtk.ListBoxRow):
         full_byte_len = len(full_text.encode('utf-8'))
         b_end = active_part.get("byte_end", full_byte_len)
 
-        r = int(color.red * 65535)
-        g = int(color.green * 65535)
-        b = int(color.blue * 65535)
-        a = int(color.alpha * 65535)
+        r = max(0, min(65535, int(round(color.red * 65535))))
+        g = max(0, min(65535, int(round(color.green * 65535))))
+        b = max(0, min(65535, int(round(color.blue * 65535))))
+        a = max(0, min(65535, int(round(color.alpha * 65535))))
 
         attr_c = Pango.attr_foreground_new(r, g, b)
         attr_c.start_index = b_start
@@ -683,14 +683,13 @@ class LyricRow(Gtk.ListBoxRow):
                     if abs(self._sub_alphas[0] - t) > 0.005:
                         self._sub_alphas[0] += (t - self._sub_alphas[0]) * self._lerp
                         changed = True
-
         else:
             for i in range(len(self.parts) if self.parts else 1):
                 target = self._word_targets[i]
                 if abs(self._word_alphas[i] - target) > 0.005:
                     self._word_alphas[i] += (target - self._word_alphas[i]) * self._lerp
                     changed = True
-                    
+
             if self.sub_label:
                 if not self.sub_parts:
                     target = self._sub_targets[0]
@@ -705,9 +704,9 @@ class LyricRow(Gtk.ListBoxRow):
                             changed = True
 
         if changed or getattr(self, "_dirty", False):
+            self._dirty = False
             self._render_markup()
             self._render_sub_markup()
-            self._dirty = False
 
     def _on_tick(self, _widget, _frame_clock):
         current_time = GLib.get_monotonic_time() / 1000.0
@@ -718,10 +717,10 @@ class LyricRow(Gtk.ListBoxRow):
 
         c_in, c_act, _ = self._get_css_colors(self.label)
         color_state = (
-            round(c_in.red, 3), round(c_in.green, 3), round(c_in.blue, 3),
-            round(c_act.red, 3), round(c_act.green, 3), round(c_act.blue, 3)
+            round(c_in.red, 2), round(c_in.green, 2), round(c_in.blue, 2),
+            round(c_act.red, 2), round(c_act.green, 2), round(c_act.blue, 2)
         )
-        
+
         if getattr(self, "_last_color_state", None) != color_state:
             self._last_color_state = color_state
             self._dirty = True
@@ -729,14 +728,14 @@ class LyricRow(Gtk.ListBoxRow):
 
         if self._wants_turn_off:
             end_bound = 0
-            if self.parts: 
+            if self.parts:
                 end_bound = max(end_bound, self.parts[-1]["end_ms"])
-            if self.sub_parts: 
+            if self.sub_parts:
                 end_bound = max(end_bound, self.sub_parts[-1]["end_ms"])
             if not self.is_paused:
                 if delta > 250:
                     self._internal_cursor_ms = end_bound + 1
-                
+
                 if self._internal_cursor_ms > end_bound or self._internal_cursor_ms < self.start_ms:
                     self._cursor_ms = -1
                     self._internal_cursor_ms = -1
@@ -745,7 +744,7 @@ class LyricRow(Gtk.ListBoxRow):
                     self._recompute_targets()
                     changed = True
                 else:
-                    if delta < 100: 
+                    if delta < 100:
                         self._internal_cursor_ms += delta
                     changed = True
         else:
@@ -765,9 +764,7 @@ class LyricRow(Gtk.ListBoxRow):
                 setattr(self, attr, cur + (target - cur) * (_EFFECT_LERP * 0.6))
                 changed = True
 
-        if getattr(self, "_dirty", False):
-            self.queue_draw()
-        elif changed or self._cursor_ms >= 0:
+        if changed or self._cursor_ms >= 0:
             self.queue_draw()
 
         return GLib.SOURCE_CONTINUE
@@ -775,31 +772,36 @@ class LyricRow(Gtk.ListBoxRow):
     def _get_css_colors(self, label):
         ctx = label.get_style_context()
         c_in = ctx.get_color()
-        
+
         ctx.save()
-        ctx.add_class("active")
-        c_act = ctx.get_color()
-        
-        ctx.remove_class("active")
-        ctx.add_class("glow")
-        c_glow = ctx.get_color()
-        ctx.restore()
-        
+        try:
+            ctx.add_class("active")
+            c_act = ctx.get_color()
+        finally:
+            ctx.restore()
+
+        ctx.save()
+        try:
+            ctx.add_class("glow")
+            c_glow = ctx.get_color()
+        finally:
+            ctx.restore()
+
         return c_in, c_act, c_glow
 
     def _lerp_color(self, c1, c2, t):
         c = Gdk.RGBA()
-        c.red = c1.red + (c2.red - c1.red) * t
-        c.green = c1.green + (c2.green - c1.green) * t
-        c.blue = c1.blue + (c2.blue - c1.blue) * t
-        c.alpha = c1.alpha + (c2.alpha - c1.alpha) * t
+        c.red = max(0.0, min(1.0, c1.red + (c2.red - c1.red) * t))
+        c.green = max(0.0, min(1.0, c1.green + (c2.green - c1.green) * t))
+        c.blue = max(0.0, min(1.0, c1.blue + (c2.blue - c1.blue) * t))
+        c.alpha = max(0.0, min(1.0, c1.alpha + (c2.alpha - c1.alpha) * t))
         return c
 
     def _color_to_markup(self, color, text):
-        r = int(color.red * 255)
-        g = int(color.green * 255)
-        b = int(color.blue * 255)
-        a = max(1, int(color.alpha * 65535))
+        r = max(0, min(255, int(round(color.red * 255))))
+        g = max(0, min(255, int(round(color.green * 255))))
+        b = max(0, min(255, int(round(color.blue * 255))))
+        a = max(1, min(65535, int(round(color.alpha * 65535))))
         return f"<span color='#{r:02x}{g:02x}{b:02x}' fgalpha='{a}'>{html.escape(text)}</span>"
 
     def _render_markup(self):
@@ -941,10 +943,10 @@ class LyricRow(Gtk.ListBoxRow):
 
             attrs = Pango.AttrList.new()
             
-            r = int(color.red * 65535)
-            g = int(color.green * 65535)
-            b = int(color.blue * 65535)
-            a = int(color.alpha * 65535)
+            r = max(0, min(65535, int(round(color.red * 65535))))
+            g = max(0, min(65535, int(round(color.green * 65535))))
+            b = max(0, min(65535, int(round(color.blue * 65535))))
+            a = max(0, min(65535, int(round(color.alpha * 65535))))
 
             attr_c = Pango.attr_foreground_new(r, g, b)
             attr_c.start_index = b_start
