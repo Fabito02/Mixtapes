@@ -45,15 +45,16 @@ MATCH_QUALITY = "quality"
 MATCH_STRICT = "strict"
 
 SECOND_LINE_MODES = ("off", "auto", "romanization", "translation", "background")
+SECOND_LINE_DEFAULT = "auto"
 EFFECTS_LEVELS = ("off", "subtle", "full")
 EFFECTS_DEFAULT = "full"
 
 # Multiplier on the lyric column's resting type size.
-FONT_SCALE_MIN, FONT_SCALE_MAX, FONT_SCALE_DEFAULT = 0.7, 2.0, 1.0
+FONT_SCALE_MIN, FONT_SCALE_MAX, FONT_SCALE_DEFAULT = 0.5, 1.45, 1.0
 # How much bigger the active line is drawn than the resting ones. The
 # row's own height never changes, and a line with no slack to grow into
 # is capped to what fits, so this can be assertive by default.
-ACTIVE_SCALE_MIN, ACTIVE_SCALE_MAX, ACTIVE_SCALE_DEFAULT = 1.0, 1.4, 1.20
+ACTIVE_SCALE_MIN, ACTIVE_SCALE_MAX, ACTIVE_SCALE_DEFAULT = 1.0, 1.3, 1.2
 
 _lock = threading.Lock()
 _cache = None
@@ -184,12 +185,26 @@ def set_match_mode(mode):
 
 
 def second_line_mode():
-    val = _read().get("lyrics_second_line", "auto")
-    return val if val in SECOND_LINE_MODES else "auto"
+    val = _read().get("lyrics_second_line", SECOND_LINE_DEFAULT)
+    return val if val in SECOND_LINE_MODES else SECOND_LINE_DEFAULT
 
 
 def set_second_line_mode(mode):
+    # An unknown mode renders a blank second line with nothing checked in
+    # the picker, which reads as "off". Normalize instead of storing it.
+    if mode not in SECOND_LINE_MODES:
+        mode = SECOND_LINE_DEFAULT
     _write("lyrics_second_line", mode)
+
+
+def ensure_second_line_mode():
+    """Write the default out when the key is missing or unusable, so the
+    setting is never left implicit. Main thread only: _write is not safe
+    against the lyric workers that read this pref."""
+    val = _read().get("lyrics_second_line")
+    if val not in SECOND_LINE_MODES:
+        _write("lyrics_second_line", SECOND_LINE_DEFAULT)
+    return second_line_mode()
 
 
 def line_sweep():
