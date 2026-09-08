@@ -1450,13 +1450,11 @@ class LyricsView(Gtk.Box):
         # padding and min-width/min-height, which shrank the clickable
         # area to roughly the icon itself and made the button feel like
         # it was ignoring clicks.
-        self._source_picker_btn.add_css_class("osd")
         self._source_picker_btn.add_css_class("circular")
         self._source_picker_btn.add_css_class("lyrics-osd-btn")
         self._source_picker_btn.set_halign(Gtk.Align.END)
         self._source_picker_btn.set_valign(Gtk.Align.START)
-        self._source_picker_btn.set_margin_top(10)
-        self._source_picker_btn.set_margin_end(10)
+        self._source_picker_btn.set_margin_end(20)
         self._source_picker_btn.set_visible(False)
         # No internal label — kept for compatibility with helpers that
         # update the visible button copy on source change.
