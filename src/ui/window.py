@@ -184,10 +184,6 @@ window.cover-bg-active .queue-header {
   background-color: @blur_panel_bg_weak;
 }
 
-window.cover-bg-active searchbar > revealer > box {
-  background-color: @blur_panel_bg;
-}
-
 /* Cards and boxed-lists. A currentColor tint instead of @card_bg_color,
    so they read bright on a dark blur and subtle on a light one. Matches
    the .home-speed-tile quick-picks look instead of a muddy gray wash. */
