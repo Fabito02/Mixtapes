@@ -2637,86 +2637,76 @@ class LyricsView(Gtk.Box):
         self._scroll_target_idx = target_idx
         self._log(1, f"scroll_to_row idx={target_idx} scheduled")
 
-        def do_scroll(retries=8):
+        retries = 8
+
+        def _check_layout_and_scroll(widget, frame_clock):
+            nonlocal retries
+
             if self._scroll_target_idx != target_idx:
                 self._log(1, f"do_scroll idx={target_idx} SUPERSEDED "
-                         f"(now targeting {self._scroll_target_idx})")
-                return False  # Superseded by a newer activation.
+                             f"(now targeting {self._scroll_target_idx})")
+                return GLib.SOURCE_REMOVE
+
+            alloc = row.get_allocation()
+            if alloc.height <= 0:
+                retries -= 1
+                if retries <= 0:
+                    self._log(2, f"do_scroll idx={target_idx} timeout waiting for layout")
+                    return GLib.SOURCE_REMOVE
+                return GLib.SOURCE_CONTINUE
+
             adj = self.scroller.get_vadjustment()
             content = self.scroller.get_child()
             if adj is None or content is None:
                 self._log(1, f"do_scroll idx={target_idx} no adj/content")
-                return False
-            alloc = row.get_allocation()
-            if alloc.height <= 0:
-                self._log(2, f"do_scroll idx={target_idx} row not laid out "
-                         f"(retries={retries})")
-                if retries > 0:
-                    GLib.timeout_add(33, do_scroll, retries - 1)
-                return False
-            # Use row.get_allocation().y directly. Empirically,
-            # compute_point(row, scroller.get_child()) in this widget
-            # hierarchy factors in the scroll transform — its result
-            # equals `alloc.y - adj.value + padding`. Subtracting vh/2
-            # from a scroll-relative y produces a target that drifts
-            # by the current adj.value each activation, so the active
-            # line creeps toward the bottom of the viewport. alloc.y is
-            # invariant of scroll: it's the row's true y inside the
-            # ListBox, which (with the ListBox at the top of the Clamp,
-            # margin_top=0) equals its y in the scrollable content.
+                return GLib.SOURCE_REMOVE
+
             viewport_h = self.scroller.get_height()
             if viewport_h <= 0:
-                self._log(1, f"do_scroll idx={target_idx} viewport not "
-                         f"realized (vh={viewport_h}) — likely a hidden "
-                         f"LyricsView; skipping")
-                return False
+                self._log(1, f"do_scroll idx={target_idx} viewport not realized")
+                return GLib.SOURCE_REMOVE
+
             target = alloc.y - (viewport_h / 2) + (alloc.height / 2)
-            raw_target = target
             target = max(adj.get_lower(),
                          min(target, adj.get_upper() - adj.get_page_size()))
-            self._log(1,
-                f"do_scroll idx={target_idx} "
-                f"row.alloc=(y={alloc.y},h={alloc.height}) "
-                f"vh={viewport_h} "
-                f"raw_target={raw_target:.1f} clamped={target:.1f} "
-                f"adj=(val={adj.get_value():.1f},lo={adj.get_lower():.1f},"
-                f"up={adj.get_upper():.1f},page={adj.get_page_size():.1f})")
+
             self._animate_to(adj, target)
-            return False
+            return GLib.SOURCE_REMOVE
 
-        GLib.idle_add(do_scroll)
+        self.add_tick_callback(_check_layout_and_scroll)
 
-    def _animate_to(self, adj, target, duration_ms=320):
+    def _animate_to(self, adj, target, duration_ms=650):
         """Smoothly scroll the adjustment from its current value to
         ``target`` over ``duration_ms`` with an ease-out curve. Any
         in-flight animation is cancelled first so consecutive calls
         seamlessly retarget."""
         if self._scroll_anim_source:
-            self._log(1, f"animate_to: cancelling in-flight animation")
-            GLib.source_remove(self._scroll_anim_source)
+            self.remove_tick_callback(self._scroll_anim_source)
             self._scroll_anim_source = 0
+
         start_value = adj.get_value()
         if abs(start_value - target) < 1.0:
-            self._log(1, f"animate_to: no-op (start={start_value:.1f} ≈ "
-                     f"target={target:.1f})")
             adj.set_value(target)
             return
-        self._log(1, f"animate_to: start={start_value:.1f} -> target={target:.1f} "
-                 f"delta={target - start_value:+.1f}")
+
         start_time = GLib.get_monotonic_time()
 
-        def _tick():
-            elapsed = (GLib.get_monotonic_time() - start_time) / 1000.0
+        def _tick(widget, frame_clock):
+            frame_time = frame_clock.get_frame_time()
+            elapsed = (frame_time - start_time) / 1000.0
+
             t = min(1.0, elapsed / max(1, duration_ms))
+
             eased = 1.0 - (1.0 - t) ** 3
             adj.set_value(start_value + (target - start_value) * eased)
+
             if t >= 1.0:
                 self._scroll_anim_source = 0
-                self._log(2, f"animate_to: done at {adj.get_value():.1f}")
-                return False
-            return True
+                return GLib.SOURCE_REMOVE
 
-        self._scroll_anim_source = GLib.timeout_add(16, _tick)
+            return GLib.SOURCE_CONTINUE
+
+        self._scroll_anim_source = self.add_tick_callback(_tick)
 
     def _render_status(self, name, title=None, description=None):
         if title is not None:
