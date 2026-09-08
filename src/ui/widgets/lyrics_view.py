@@ -1320,7 +1320,7 @@ class LyricsView(Gtk.Box):
         # Display prefs (second-line content, effect level). Cached on the
         # view because every row build reads them; refreshed whenever the
         # settings dialog reports a change.
-        self._second_line_mode = lyrics_prefs.second_line_mode()
+        self._second_line_mode = lyrics_prefs.ensure_second_line_mode()
         self._effects = lyrics_prefs.effects_level()
         self._sweep = lyrics_prefs.line_sweep()
         self._active_scale = lyrics_prefs.active_scale()
@@ -1808,6 +1808,18 @@ class LyricsView(Gtk.Box):
             if key in ("off", "auto") or key in have
         ]
 
+    def _effective_second_line_mode(self):
+        """The saved mode, or the default when this track's lyrics have no
+        data for it. A mode with nothing to show would draw a blank second
+        line and leave every picker row unchecked, which reads as "off"."""
+        mode = self._second_line_mode
+        if mode == "off":
+            return mode
+        available = self._available_second_lines()
+        if not available or mode in available:
+            return mode
+        return lyrics_prefs.SECOND_LINE_DEFAULT
+
     def _refresh_second_line_rows(self):
         child = self._second_line_list.get_first_child()
         while child is not None:
@@ -1821,6 +1833,7 @@ class LyricsView(Gtk.Box):
             return
 
         labels = dict(self._SECOND_LINE_LABELS)
+        current = self._effective_second_line_mode()
         for key in available:
             row = Gtk.ListBoxRow()
             row.set_activatable(True)
@@ -1832,7 +1845,7 @@ class LyricsView(Gtk.Box):
             box.append(label)
             check = Gtk.Image.new_from_icon_name("object-select-symbolic")
             check.set_valign(Gtk.Align.CENTER)
-            check.set_opacity(1.0 if key == self._second_line_mode else 0.0)
+            check.set_opacity(1.0 if key == current else 0.0)
             box.append(check)
             row.set_child(box)
             self._second_line_list.append(row)
@@ -2435,6 +2448,8 @@ class LyricsView(Gtk.Box):
     def _build_rows(self):
         self._clear_rows()
 
+        second_line_mode = self._effective_second_line_mode()
+
         # Interlude markers occupy their own rows, so a row's position in
         # the ListBox stops matching its index in ``_lines``. Everything
         # that looks a row up by line index goes through ``_row_for_line``.
@@ -2459,7 +2474,7 @@ class LyricsView(Gtk.Box):
 
             row = LyricRow(
                 line, i,
-                second_line_mode=self._second_line_mode,
+                second_line_mode=second_line_mode,
                 effects=self._effects,
                 sweep_end_ms=self._sweep_end_ms(i),
                 sweep=self._sweep,

@@ -45,6 +45,7 @@ MATCH_QUALITY = "quality"
 MATCH_STRICT = "strict"
 
 SECOND_LINE_MODES = ("off", "auto", "romanization", "translation", "background")
+SECOND_LINE_DEFAULT = "auto"
 EFFECTS_LEVELS = ("off", "subtle", "full")
 EFFECTS_DEFAULT = "full"
 
@@ -184,12 +185,26 @@ def set_match_mode(mode):
 
 
 def second_line_mode():
-    val = _read().get("lyrics_second_line", "auto")
-    return val if val in SECOND_LINE_MODES else "auto"
+    val = _read().get("lyrics_second_line", SECOND_LINE_DEFAULT)
+    return val if val in SECOND_LINE_MODES else SECOND_LINE_DEFAULT
 
 
 def set_second_line_mode(mode):
+    # An unknown mode renders a blank second line with nothing checked in
+    # the picker, which reads as "off". Normalize instead of storing it.
+    if mode not in SECOND_LINE_MODES:
+        mode = SECOND_LINE_DEFAULT
     _write("lyrics_second_line", mode)
+
+
+def ensure_second_line_mode():
+    """Write the default out when the key is missing or unusable, so the
+    setting is never left implicit. Main thread only: _write is not safe
+    against the lyric workers that read this pref."""
+    val = _read().get("lyrics_second_line")
+    if val not in SECOND_LINE_MODES:
+        _write("lyrics_second_line", SECOND_LINE_DEFAULT)
+    return second_line_mode()
 
 
 def line_sweep():
