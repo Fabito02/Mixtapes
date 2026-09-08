@@ -43,40 +43,48 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>Library page in grid view</caption>
-      <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/9.png</image>
+      <caption>Home feed</caption>
+      <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/0.png</image>
     </screenshot>
-    <screenshot type="default">
+    <screenshot>
       <caption>Playlist page and open queue</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/1.png</image>
     </screenshot>
     <screenshot>
-      <caption>Artist page</caption>
+      <caption>Synced lyrics with open queue</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/2.png</image>
     </screenshot>
     <screenshot>
-      <caption>Album page</caption>
+      <caption>Artist page</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/3.png</image>
     </screenshot>
     <screenshot>
-      <caption>Search results</caption>
+      <caption>Album page</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/4.png</image>
     </screenshot>
     <screenshot>
-      <caption>Mobile expanded player</caption>
+      <caption>Search results</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/5.png</image>
     </screenshot>
     <screenshot>
-      <caption>Mobile queue</caption>
+      <caption>Library page in grid view</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/6.png</image>
     </screenshot>
     <screenshot>
-      <caption>Mobile artist page</caption>
+      <caption>Mobile expanded player</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/7.png</image>
     </screenshot>
     <screenshot>
-      <caption>Mobile album page</caption>
+      <caption>Mobile queue</caption>
       <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/8.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Mobile artist page</caption>
+      <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/9.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Mobile album page</caption>
+      <image>https://raw.githubusercontent.com/m-obeid/Mixtapes/main/screenshots/10.png</image>
     </screenshot>
   </screenshots>
 

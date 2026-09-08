@@ -28,12 +28,13 @@ A modern, Linux-first YouTube Music player built with GTK4 and Libadwaita.
 ---
 
 <div align="center">
-  <img src="screenshots/9.png" />
-  <img src="screenshots/1.png" width="49%" /> <img src="screenshots/2.png" width="49%" />
-  <img src="screenshots/3.png" width="49%" /> <img src="screenshots/4.png" width="49%" />
+  <img src="screenshots/0.png" />
+  <img src="screenshots/6.png" width="49%" /> <img src="screenshots/1.png" width="49%" />
+  <img src="screenshots/2.png" width="49%" /> <img src="screenshots/3.png" width="49%" />
+  <img src="screenshots/4.png" width="49%" /> <img src="screenshots/5.png" width="49%" />
   <br/>
-  <img src="screenshots/5.png" width="24%" /> <img src="screenshots/6.png" width="24%" /> <img src="screenshots/7.png" width="24%" /> 
-  <img src="screenshots/8.png" width="24%" />
+  <img src="screenshots/7.png" width="24%" /> <img src="screenshots/8.png" width="24%" /> <img src="screenshots/9.png" width="24%" /> 
+  <img src="screenshots/10.png" width="24%" />
 </div>
 
 ---
