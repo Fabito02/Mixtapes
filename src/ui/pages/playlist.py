@@ -57,7 +57,6 @@ class PlaylistPage(Adw.Bin):
         self.is_owned = False
         self.is_editable = False
 
-        # ── 1. Header UI Container ────────────────────────────────────────────
         self.header_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.header_container.set_margin_top(24)
         self.header_container.set_margin_bottom(12)
@@ -83,7 +82,6 @@ class PlaylistPage(Adw.Bin):
         cover_gesture.connect("pressed", self.on_cover_right_click)
         self.cover_wrapper.add_controller(cover_gesture)
 
-        # Long Press for touch
         lp = Gtk.GestureLongPress()
         lp.connect("pressed", lambda g, x, y: self.on_cover_right_click(g, 1, x, y))
         self.cover_wrapper.add_controller(lp)
@@ -171,7 +169,6 @@ class PlaylistPage(Adw.Bin):
 
         # Simplified Actions (Play/Shuffle only)
 
-        # self.edit_btn and self.delete_btn are no longer in the main actions_box
 
         self.more_btn = Gtk.MenuButton(icon_name="view-more-symbolic")
         self.more_btn.add_css_class("circular")
@@ -191,7 +188,6 @@ class PlaylistPage(Adw.Bin):
         self.more_btn.connect("notify::active", self._on_more_btn_active)
         actions_box.append(self.more_btn)
 
-        # Actions Row
         self.action_group = Gio.SimpleActionGroup()
         self.insert_action_group("page", self.action_group)
 
@@ -455,8 +451,16 @@ class PlaylistPage(Adw.Bin):
         self.is_loading_more = False
         self.current_filter_text = ""
 
-    # ── Factory callbacks ─────────────────────────────────────────────────────
+    def do_unroot(self):
+        if hasattr(self, "track_store"):
+            self.track_store.remove_all()
+        if hasattr(self, "original_tracks"):
+            self.original_tracks.clear()
+        if hasattr(self, "current_tracks"):
+            self.current_tracks.clear()
 
+        Adw.Bin.do_unroot(self)
+        
     def _setup_list_item(self, factory, list_item):
         bin_widget = Adw.Bin()
         bin_widget.add_css_class("list-item-bin")

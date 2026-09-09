@@ -1350,11 +1350,15 @@ class MainWindow(Adw.ApplicationWindow):
             and self.main_stack.get_visible_child_name() in ("player", "cover")
         ):
             self._on_player_dismissed(None)
+            from ui.utils import force_garbage_collect
+            GLib.timeout_add(500, force_garbage_collect)
             return
 
         nav = self._get_active_nav_view()
         if nav:
             nav.pop()
+            from ui.utils import force_garbage_collect
+            GLib.timeout_add(500, force_garbage_collect)
 
     def _build_avatar_menu_button(self):
         """Account button in the header bar — Bazaar-style.

@@ -5,6 +5,9 @@ import weakref
 import collections
 import re
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+import gc
+import ctypes
+import sys
 
 
 # is_online() is called from every bind path that greys out offline rows —
@@ -1573,6 +1576,15 @@ def bind_weak_signal(emitter, signal_name, lifecycle_obj, callback):
 
     handler_id[0] = emitter.connect(signal_name, _wrapper)
     return handler_id[0]
+
+def force_garbage_collect():
+    
+    gc.collect()
+    if sys.platform.startswith("linux"):
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
 
 
 class LikeButton(Gtk.Button):
