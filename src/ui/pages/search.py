@@ -467,7 +467,7 @@ class SearchPage(Adw.Bin):
         thumbnails = item.get("thumbnails", [])
         thumb_url = thumbnails[-1].get("url") if thumbnails else None
 
-        img = AsyncImage(url=thumb_url, size=160, player=self.player)
+        img = AsyncImage(url=thumb_url, size=150, player=self.player)
         if not thumb_url:
             img.set_from_icon_name("media-playlist-audio-symbolic")
 

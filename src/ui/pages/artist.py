@@ -778,7 +778,7 @@ class ArtistPage(Adw.Bin):
         thumbnails = item.get("thumbnails", [])
         thumb_url = thumbnails[-1]["url"] if thumbnails else None
 
-        img = AsyncImage(url=thumb_url, size=140, player=self.player)
+        img = AsyncImage(url=thumb_url, size=150, player=self.player)
         img.video_id = (
             item.get("videoId") or item.get("playlistId") or item.get("browseId")
         )

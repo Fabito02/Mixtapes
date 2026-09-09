@@ -56,12 +56,12 @@ def _make_flow_grid():
     + the `.card` wrapper padding."""
     grid = Adw.WrapBox()
     grid.set_valign(Gtk.Align.START)
+    grid.set_align(0)
     grid.set_line_homogeneous(True)
     grid.set_line_spacing(12)
     grid.set_child_spacing(12)
     grid.set_visible(False)
     return grid
-
 
 def _make_library_card(player, title, subtitle, thumb_url, fallback_icon, on_clicked=None):
     from ui.utils import AsyncImage
@@ -74,7 +74,7 @@ def _make_library_card(player, title, subtitle, thumb_url, fallback_icon, on_cli
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     child.set_child(box)
 
-    img = AsyncImage(url=thumb_url, size=160, player=player)
+    img = AsyncImage(url=thumb_url, size=150, player=player)
     if not thumb_url and fallback_icon:
         img.set_from_icon_name(fallback_icon)
 
@@ -125,11 +125,9 @@ class LibraryPage(Adw.Bin):
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
-        # Tab switcher: Library / Uploads
         self.lib_stack = Gtk.Stack()
         self.lib_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
 
-        # Single scrolled window for the whole page
         scrolled = ScrolledWindow()
         scrolled.set_vexpand(True)
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -137,7 +135,7 @@ class LibraryPage(Adw.Bin):
         clamp = Adw.Clamp()
         # Match PlaylistPage's width so the Library/Explore/Playlist views
         # line up visually as the user tab-switches.
-        clamp.set_maximum_size(1024)
+        clamp.set_maximum_size(1124)
         clamp.set_tightening_threshold(600)
 
         self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
@@ -146,11 +144,9 @@ class LibraryPage(Adw.Bin):
         self.content_box.set_margin_start(12)
         self.content_box.set_margin_end(12)
 
-        # Tab row inside the content (same constraints as albums/artists)
         tab_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         tab_row.set_margin_bottom(8)
 
-        # Compact toggle buttons instead of StackSwitcher
         self._lib_tab_btn = Gtk.ToggleButton(label="Library")
         self._lib_tab_btn.set_active(True)
         self._upl_tab_btn = Gtk.ToggleButton(label="Uploads")
@@ -170,11 +166,8 @@ class LibraryPage(Adw.Bin):
         spacer.set_hexpand(True)
         tab_row.append(spacer)
 
-        # Library action buttons (only visible on library tab)
         self.lib_actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
 
-        # Single toggle between list and grid view. Icon swaps to show the
-        # mode we'd switch *to* on the next click (like Nautilus).
         self.view_toggle_btn = Gtk.Button()
         self.view_toggle_btn.add_css_class("flat")
         self.view_toggle_btn.add_css_class("circular")
@@ -183,13 +176,7 @@ class LibraryPage(Adw.Bin):
         self.lib_actions_box.append(self.view_toggle_btn)
         self._sync_view_toggle_button()
 
-        # Downloads / History / Upload have moved to the avatar menu in
-        # the header bar — see MainWindow._build_avatar_menu_button.
         tab_row.append(self.lib_actions_box)
-
-        # Upload action buttons (only visible on uploads tab). The
-        # "Upload songs" action itself lives in the avatar menu; what
-        # stays here is the upload-tab-only "All songs" view shortcut.
         self.uploads_actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.uploads_actions_box.set_visible(False)
 
@@ -204,15 +191,11 @@ class LibraryPage(Adw.Bin):
         tab_row.append(self.uploads_actions_box)
         self.content_box.append(tab_row)
 
-        # The lib_stack goes below the tab row
         self.lib_stack.set_vexpand(True)
         self.content_box.append(self.lib_stack)
 
-        # Library tab content (playlists, albums, artists)
         self.lib_content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
 
-        # Filter text is driven by the MainWindow global search bar via
-        # `filter_content(text)`, matching PlaylistPage's pattern.
         self.current_filter_text = ""
 
         self.lib_stack.add_titled(self.lib_content_box, "library", "Library")
@@ -322,7 +305,6 @@ class LibraryPage(Adw.Bin):
 
         self.lib_content_box.append(artists_section)
 
-        # ── Tab 2: Uploads ──
         self.uploads_page = UploadsPage(self.player, self.client, self.open_playlist_callback)
         self.uploads_page._library_page = self  # Reference for upload queue UI
         # Hoist the uploads loading indicator to the main-box-level
@@ -337,7 +319,7 @@ class LibraryPage(Adw.Bin):
         self._uploads_loading_pending = False
         self.uploads_page.set_loading_cb(_set_uploads_loading)
         self.lib_stack.add_titled(self.uploads_page, "uploads", "Uploads")
-        self._uploads_loaded = True  # Will be loaded on startup
+        self._uploads_loaded = True
         self.lib_stack.connect("notify::visible-child-name", self._on_tab_changed)
 
         clamp.set_child(self.content_box)
@@ -358,11 +340,9 @@ class LibraryPage(Adw.Bin):
         self.main_box.append(loading_overlay)
         self.set_child(self.main_box)
 
-        # Load Library + Uploads
         self.load_library()
         self.uploads_page.load()
 
-        # Connect Player
         self.loading_row_spinner = None
         self.player.connect("state-changed", self.on_player_state_changed)
 

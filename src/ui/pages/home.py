@@ -12,7 +12,7 @@ from ui.widgets.scroll_box import HorizontalScrollBox
 from ui.util_classes import ScrolledWindow
 
 
-CARD_SIZE = 140
+CARD_SIZE = 150
 SPEED_TILE_COVER = 56
 SONG_THUMB_SIZE = 56
 

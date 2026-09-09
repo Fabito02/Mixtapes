@@ -2675,7 +2675,7 @@ class LyricsView(Gtk.Box):
 
         self.add_tick_callback(_check_layout_and_scroll)
 
-    def _animate_to(self, adj, target, duration_ms=650):
+    def _animate_to(self, adj, target, duration_ms=500):
         """Smoothly scroll the adjustment from its current value to
         ``target`` over ``duration_ms`` with an ease-out curve. Any
         in-flight animation is cancelled first so consecutive calls
