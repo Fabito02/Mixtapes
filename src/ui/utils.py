@@ -901,13 +901,33 @@ class AsyncImage(Gtk.Image):
         self._pending_fetch = None
         self._map_handler_id = None
         self.connect("destroy", self._on_destroy)
-        # Remember the desktop size so set_compact() can restore it
-        # when compact mode toggles off. Mirrors AsyncPicture.target_size.
         self._base_size = self.target_w
+
+        self.connect("unmap", self._on_unmap)
 
         if url:
             self.load_url(url)
 
+    def cancel_and_unload(self):
+        self._pending_fetch = None
+        if getattr(self, "_map_handler_id", None):
+            try:
+                self.disconnect(self._map_handler_id)
+            except Exception:
+                pass
+            self._map_handler_id = None
+
+        self.clear()
+        self._is_placeholder = True
+
+    def _on_unmap(self, widget):
+        current_url = self.url
+        if not current_url:
+            return
+        self.cancel_and_unload()
+        self.set_from_icon_name("image-missing-symbolic")
+        self.load_url(current_url)
+        
     def _on_destroy(self, *_):
         self._pending_fetch = None
         self.url = None
@@ -1186,12 +1206,10 @@ class AsyncImage(Gtk.Image):
 
 
 def subprocess_pixbuf(pixbuf, x, y, w, h):
-    # bindings helper
     return pixbuf.new_subpixbuf(x, y, w, h)
 
 
 class AsyncPicture(Gtk.Picture):
-    # Added crop_to_square parameter
     def __init__(
         self,
         url=None,
@@ -1212,9 +1230,8 @@ class AsyncPicture(Gtk.Picture):
         self._pending_fetch = None
         self._map_handler_id = None
         self.connect("destroy", self._on_destroy)
-
-        # Constrain the picture widget to target_size so it doesn't
-        # request more space when a non-square texture is loaded
+        self.connect("unmap", self._on_unmap)
+        
         if target_size:
             self.set_size_request(target_size, target_size)
             self.set_hexpand(False)
@@ -1223,13 +1240,29 @@ class AsyncPicture(Gtk.Picture):
         if icon_name:
             self.set_from_icon_name(icon_name)
         else:
-            # Skip the eager placeholder icon-name lookup; the bind path
-            # calls load_url which sets it on miss. ~25 row Pictures × 1
-            # icon-theme roundtrip apiece used to fire on every cold
-            # playlist render.
             self._is_placeholder = True
             if url:
                 self.load_url(url)
+
+    def cancel_and_unload(self):
+        self._pending_fetch = None
+        if getattr(self, "_map_handler_id", None):
+            try:
+                self.disconnect(self._map_handler_id)
+            except Exception:
+                pass
+            self._map_handler_id = None
+
+        self.set_paintable(None)
+        self._is_placeholder = True
+
+    def _on_unmap(self, widget):
+        current_url = self.url
+        if not current_url:
+            return
+        self.cancel_and_unload()
+        self.set_from_icon_name("image-missing-symbolic")
+        self.load_url(current_url)
 
     def _on_destroy(self, *_):
         self._pending_fetch = None
