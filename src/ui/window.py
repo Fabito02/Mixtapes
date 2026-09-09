@@ -192,6 +192,18 @@ window.cover-bg-active .card {
   background-color: alpha(currentColor, 0.1);
 }
 
+window.cover-bg-active .home-speed-tile {
+  background-color: alpha(currentColor, 0.1);
+}
+
+window.cover-bg-active .home-speed-tile:hover {
+  background-color: alpha(currentColor, 0.18);
+}
+
+window.cover-bg-active .home-speed-tile:active {
+  background-color: alpha(currentColor, 0.25);
+}
+
 /* Cards inside floating dialogs (Adw.PreferencesDialog etc.) and
    popovers do NOT sit on the blurred cover bg. They sit on the dialog's
    own surface, where the translucent treatment looks washed out and

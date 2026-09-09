@@ -612,7 +612,6 @@ class HomePage(Adw.Bin):
         tile = Gtk.Button()
         tile.add_css_class("home-speed-tile")
         tile.add_css_class("card")
-        tile.add_css_class("activatable")
 
         root = self.get_root()
         compact = bool(getattr(root, "_is_compact", False)) if root else self._compact
@@ -672,7 +671,7 @@ class HomePage(Adw.Bin):
         )
         tile.add_controller(lp)
 
-        _attach_item_playing_state(tile, self.player, item.get("videoId"), is_button=True)
+        _attach_item_playing_state(tile, self.player, item.get("videoId"), is_button=False)
 
         return tile
 

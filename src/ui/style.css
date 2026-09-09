@@ -316,6 +316,19 @@ listview.playlist-view > row:disabled {
 .home-speed-tile {
   padding: 8px;
   border-radius: 12px;
+  background-color: @card_bg_color;
+  background-image: none;
+  transition: background-color 200ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.home-speed-tile:hover {
+  background-color: mix(@card_bg_color, @card_fg_color, 0.07);
+  background-image: none;
+}
+
+.home-speed-tile:active {
+  background-color: mix(@card_bg_color, @card_fg_color, 0.14);
+  background-image: none;
 }
 
 /* In compact (mobile) layout the page surfaces more tiles per screen
