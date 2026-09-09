@@ -13,18 +13,11 @@ class SearchPage(Adw.Bin):
         self.client = MusicClient()
         self.open_playlist_callback = open_playlist_callback
 
-        # Layout
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        # Search Bar removed (Global in MainWindow)
-
-        # Content Stack
-
-        # Content Stack
         self.stack = Gtk.Stack()
         self.stack.set_vexpand(True)
 
-        # 1. Results View
         results_scrolled = ScrolledWindow()
         results_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
@@ -43,14 +36,12 @@ class SearchPage(Adw.Bin):
 
         self.stack.add_named(results_scrolled, "results")
 
-        # 2. Loading View
         loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         loading_box.set_valign(Gtk.Align.CENTER)
         loading_box.set_halign(Gtk.Align.CENTER)
 
         self.spinner = Adw.Spinner()
         self.spinner.set_size_request(32, 32)
-        # self.spinner.set_spinning(True) # Adw.Spinner spins by default
         loading_box.append(self.spinner)
 
         loading_label = Gtk.Label(label="Searching...")
@@ -59,11 +50,9 @@ class SearchPage(Adw.Bin):
 
         self.stack.add_named(loading_box, "loading")
 
-        # 3. Explore View (Default)
         explore_scrolled = ScrolledWindow()
         explore_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
-        # Clamp for Explore
         explore_clamp = Adw.Clamp()
         explore_clamp.set_maximum_size(1024)
         explore_clamp.set_tightening_threshold(600)
@@ -84,26 +73,17 @@ class SearchPage(Adw.Bin):
         self.set_child(box)
         self.search_timer = None
 
-        # Show explore initially
         self.stack.set_visible_child_name("explore")
 
-        # Load saved chart country preference
         self._charts_country = self._load_charts_country()
 
-        # Explore load state
         self._explore_loaded = False
         self._explore_loading = False
         self._explore_retry_count = 0
 
-        # Kick off the Explore fetch on an idle tick so it doesn't
-        # compete with the rest of the UI's initial layout. The fetch
-        # itself runs on a worker thread, so this only buys us the
-        # widget-construction breathing room — but means the user lands
-        # on a populated Explore tab the first time they click into it
-        # rather than an empty screen.
+
         GLib.idle_add(self.load_explore_data)
 
-        # Player listeners
         self.loading_row_spinner = None
         self.player.connect("state-changed", self.on_player_state_changed)
 
@@ -148,7 +128,7 @@ class SearchPage(Adw.Bin):
             # We want to allow the event to propagate so the entry handles it
             # Focus the search entry to allow typing. Forwarding the event handles the first character.
 
-            if keyval < 65000:  # Rough check for non-special keys?
+            if keyval < 65000:
                 self.search_entry.grab_focus()
                 return controller.forward(self.search_entry)
 
@@ -472,10 +452,67 @@ class SearchPage(Adw.Bin):
         if artists:
             self._add_chart_artists("Top Artists", artists)
 
-    def _add_chart_playlists(self, title, items):
-        """Add a horizontal scroll section of chart playlist cards."""
+    def _make_chart_card(self, item, on_clicked=None):
         from ui.utils import AsyncImage
 
+        child = Gtk.Button()
+        child.add_css_class("activatable")
+        child.add_css_class("artist-horizontal-item")
+        child.add_css_class("flat")
+        child.item_data = item
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        child.set_child(box)
+
+        thumbnails = item.get("thumbnails", [])
+        thumb_url = thumbnails[-1].get("url") if thumbnails else None
+
+        img = AsyncImage(url=thumb_url, size=160, player=self.player)
+        if not thumb_url:
+            img.set_from_icon_name("media-playlist-audio-symbolic")
+
+        wrapper = Gtk.Box()
+        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
+        wrapper.add_css_class("card-cover")
+        wrapper.set_halign(Gtk.Align.CENTER)
+        wrapper.append(img)
+        box.append(wrapper)
+
+        title = item.get("title", "")
+        title_label = Gtk.Label(label=title)
+        title_label.set_halign(Gtk.Align.START)
+        title_label.set_ellipsize(Pango.EllipsizeMode.END)
+        title_label.set_wrap(True)
+        title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        title_label.set_lines(2)
+        title_label.set_justify(Gtk.Justification.LEFT)
+        title_label.set_tooltip_text(title)
+
+        title_clamp = Adw.Clamp()
+        title_clamp.set_child(title_label)
+        box.append(title_clamp)
+
+        subtitle = item.get("subtitle") or item.get("description")
+        if subtitle:
+            subtitle_label = Gtk.Label(label=subtitle)
+            subtitle_label.set_halign(Gtk.Align.START)
+            subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
+            subtitle_label.add_css_class("dim-label")
+            subtitle_label.add_css_class("caption")
+
+            subtitle_clamp = Adw.Clamp()
+            subtitle_clamp.set_child(subtitle_label)
+            box.append(subtitle_clamp)
+
+        child._cover_img = img
+
+        if on_clicked:
+            child.connect("clicked", lambda btn: on_clicked(btn, item))
+
+        return child
+
+    def _add_chart_playlists(self, title, items):
+        """Add a horizontal scroll section of chart playlist cards."""
         section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.explore_box.append(section_box)
 
@@ -491,42 +528,20 @@ class SearchPage(Adw.Bin):
         h_box.set_margin_bottom(8)
 
         for item in items:
-            thumb_url = item.get("thumbnails", [{}])[-1].get("url") if item.get("thumbnails") else None
-
-            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            card.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
-            card.add_css_class("artist-horizontal-item")
-            card.item_data = item
-
-            # Matches the 160px cover size used by library/search grids so
-            # the Charts row doesn't tower over everything else on Explore.
-            img = AsyncImage(url=thumb_url, size=160, player=self.player)
-            wrapper = Gtk.Box()
-            wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-            wrapper.add_css_class("card")
-            wrapper.set_halign(Gtk.Align.CENTER)
-            wrapper.append(img)
-            card.append(wrapper)
-
-            name_label = Gtk.Label(label=item.get("title", ""))
-            name_label.set_ellipsize(Pango.EllipsizeMode.END)
-            name_label.set_wrap(True)
-            name_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            name_label.set_lines(2)
-            name_label.set_halign(Gtk.Align.START)
-            clamp = Adw.Clamp(maximum_size=160)
-            clamp.set_child(name_label)
-            card.append(clamp)
-
-            click = Gtk.GestureClick()
-            click.set_button(1)
-            click.connect("released", self._on_chart_playlist_clicked, item)
-            card.add_controller(click)
-
+            card = self._make_chart_card(
+                item,
+                on_clicked=lambda btn, it: self._handle_chart_click(it)
+            )
             h_box.append(card)
 
         scroll_box.set_content(h_box)
         section_box.append(scroll_box)
+
+    def _handle_chart_click(self, item):
+        try:
+            self._on_chart_playlist_clicked(None, 1, 0, 0, item)
+        except TypeError:
+            self._on_chart_playlist_clicked(item)
 
     def _add_chart_artists(self, title, artists):
         """Add a ranked list of chart artists."""
@@ -653,15 +668,18 @@ class SearchPage(Adw.Bin):
             pass
         return "ZZ"
 
-    def _on_chart_playlist_clicked(self, gesture, n_press, x, y, item):
-        playlist_id = item.get("playlistId")
-        if playlist_id:
-            root = self.get_root()
-            if root and hasattr(root, "open_playlist"):
-                root.open_playlist(playlist_id, {
-                    "title": item.get("title", ""),
-                    "thumb": item.get("thumbnails", [{}])[-1].get("url") if item.get("thumbnails") else None,
-                })
+    def _on_chart_playlist_clicked(self, *args, **kwargs):
+        item = args[-1] if args else kwargs.get("item")
+        if not item:
+            return
+
+        pid = item.get("playlistId")
+        if pid and hasattr(self, "open_playlist_callback"):
+            initial_data = {
+                "title": item.get("title", ""),
+                "thumb": (item.get("thumbnails", [{}])[-1] or {}).get("url"),
+            }
+            self.open_playlist_callback(pid, initial_data)
 
     def _on_chart_artist_activated(self, listbox, row):
         if hasattr(row, "artist_data"):
