@@ -795,7 +795,7 @@ class ArtistPage(Adw.Bin):
         lbl.set_ellipsize(Pango.EllipsizeMode.END)
         lbl.set_wrap(True)
         lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        lbl.set_lines(2)
+        lbl.set_lines(1)
         lbl.set_justify(Gtk.Justification.LEFT)
         lbl.set_halign(Gtk.Align.START)
         lbl.set_tooltip_text(title)

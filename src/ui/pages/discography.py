@@ -1,10 +1,12 @@
-from gi.repository import Gtk, Adw, GObject, GLib, Pango
-import threading
 import json
+import threading
+from gi.repository import Adw, GLib, GObject, Gtk, Pango
 from api.client import MusicClient
-from ui.utils import AsyncImage, parse_item_metadata, copy_to_clipboard
 from ui.context_menu import MenuAction, show_item_menu
 from ui.util_classes import ScrolledWindow
+from ui.utils import AsyncImage, copy_to_clipboard, parse_item_metadata
+
+CARD_SIZE = 150
 
 
 class DiscographyPage(Adw.Bin):
@@ -29,8 +31,6 @@ class DiscographyPage(Adw.Bin):
         # Main Layout
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
-        # Header Bar removed because Adw.NavigationPage handles it
-
         # Scrolled Window
         self.scrolled = ScrolledWindow()
         self.scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -46,25 +46,16 @@ class DiscographyPage(Adw.Bin):
         self.content_box.set_margin_start(24)
         self.content_box.set_margin_end(24)
 
-        # FlowBox for Grid
-        self.flow_box = Gtk.FlowBox()
+        self.flow_box = Adw.WrapBox()
         self.flow_box.set_valign(Gtk.Align.START)
-        self.flow_box.set_max_children_per_line(5)
-        self.flow_box.set_min_children_per_line(2)
-        self.flow_box.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.flow_box.set_column_spacing(0)
-        self.flow_box.set_row_spacing(0)
-        self.flow_box.set_homogeneous(True)
-        self.flow_box.set_activate_on_single_click(True)
-        self.flow_box.connect("child-activated", self.on_grid_child_activated)
+        self.flow_box.set_align(0.5)
+        self.flow_box.set_line_homogeneous(True)
+        self.flow_box.set_line_spacing(24)
+        self.flow_box.set_child_spacing(24)
 
         self.content_box.append(self.flow_box)
 
-        # Loading Spinner. Wrapped in a vexpanding box whose natural size
-        # is small, so `valign=CENTER` lands the spinner vertically
-        # centered in the viewport when the grid is still empty (initial
-        # load). Once items populate, the grid pushes the spinner down
-        # and load-more renders it at the bottom, same as before.
+        # Loading Spinner
         self._loading_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._loading_wrap.set_vexpand(True)
         self._loading_wrap.set_valign(Gtk.Align.CENTER)
@@ -78,7 +69,6 @@ class DiscographyPage(Adw.Bin):
         self._loading_wrap.set_visible(False)
         self.content_box.append(self._loading_wrap)
 
-        # Clamp for consistent width
         self.clamp = Adw.Clamp()
         self.clamp.set_maximum_size(1024)
         self.clamp.set_tightening_threshold(600)
@@ -95,13 +85,15 @@ class DiscographyPage(Adw.Bin):
             self.content_box.set_spacing(12)
             self.content_box.set_margin_start(12)
             self.content_box.set_margin_end(12)
-            self.flow_box.set_max_children_per_line(3)
+            self.flow_box.set_line_spacing(12)
+            self.flow_box.set_child_spacing(12)
         else:
             self.remove_css_class("compact")
             self.content_box.set_spacing(16)
             self.content_box.set_margin_start(24)
             self.content_box.set_margin_end(24)
-            self.flow_box.set_max_children_per_line(5)
+            self.flow_box.set_line_spacing(24)
+            self.flow_box.set_child_spacing(24)
 
     def load_discography(
         self, channel_id, title, browse_id=None, params=None, initial_items=None
@@ -111,7 +103,6 @@ class DiscographyPage(Adw.Bin):
         self.browse_id = browse_id
         self.params = params
 
-        # Clear existing items
         self.items = []
         child = self.flow_box.get_first_child()
         while child:
@@ -133,8 +124,9 @@ class DiscographyPage(Adw.Bin):
         query = text.lower().strip()
         child = self.flow_box.get_first_child()
         while child:
-            if hasattr(child, "item_data"):
-                title = child.item_data.get("title", "").lower()
+            target = child.get_child() if hasattr(child, "get_child") else child
+            if hasattr(target, "item_data"):
+                title = target.item_data.get("title", "").lower()
                 child.set_visible(not query or query in title)
             child = child.get_next_sibling()
 
@@ -146,7 +138,6 @@ class DiscographyPage(Adw.Bin):
         upper = adjustment.get_upper()
         page_size = adjustment.get_page_size()
 
-        # Load more when we are near the bottom
         if upper - (value + page_size) < 200:
             self._load_more()
 
@@ -163,13 +154,11 @@ class DiscographyPage(Adw.Bin):
                 if self.browse_id and "Top Songs" in self.title:
                     pass
                 elif self.browse_id and self.params:
-                    # Albums, singles, videos - get_artist_albums with raw parser fallback
                     new_items = self.client.get_artist_albums(
                         self.browse_id, self.params, limit=100
                     )
                     self._has_more = False
                 elif self.browse_id:
-                    # Fallback: try as playlist, then raw parse
                     try:
                         res = self.client.get_playlist(self.browse_id)
                         new_items = res.get("tracks", []) if res else []
@@ -181,7 +170,6 @@ class DiscographyPage(Adw.Bin):
 
                 def update_cb():
                     if new_items:
-                        # Filter out items we already have
                         existing_ids = set()
                         for item in self.items:
                             for key in ("browseId", "videoId", "playlistId"):
@@ -214,101 +202,131 @@ class DiscographyPage(Adw.Bin):
 
         threading.Thread(target=fetch_func, daemon=True).start()
 
+    def _make_card(self, item):
+        child = Gtk.Button()
+        child.add_css_class("activatable")
+        child.add_css_class("artist-horizontal-item")
+        child.add_css_class("flat")
+        child.set_size_request(CARD_SIZE, -1)
+        child.set_hexpand(False)
+        child.set_halign(Gtk.Align.START)
+        child.item_data = item
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_size_request(CARD_SIZE, -1)
+        child.set_child(box)
+
+        thumbnails = item.get("thumbnails", [])
+        thumb_url = thumbnails[-1].get("url") if thumbnails else None
+
+        img = AsyncImage(url=thumb_url, size=CARD_SIZE, player=self.player)
+        img.video_id = (
+            item.get("videoId") or item.get("playlistId") or item.get("browseId")
+        )
+        if not thumb_url:
+            img.set_from_icon_name("media-playlist-audio-symbolic")
+
+        wrapper = Gtk.Box()
+        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
+        wrapper.add_css_class("card-cover")
+        wrapper.set_halign(Gtk.Align.CENTER)
+        wrapper.append(img)
+        box.append(wrapper)
+
+        title = item.get("title", "")
+        title_label = Gtk.Label(label=title)
+        title_label.set_halign(Gtk.Align.START)
+        title_label.set_ellipsize(Pango.EllipsizeMode.END)
+        title_label.set_wrap(True)
+        title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        title_label.set_lines(1)
+        title_label.set_justify(Gtk.Justification.LEFT)
+        title_label.set_tooltip_text(title)
+
+        title_clamp = Adw.Clamp()
+        title_clamp.set_maximum_size(CARD_SIZE)
+        title_clamp.set_tightening_threshold(CARD_SIZE)
+        title_clamp.set_child(title_label)
+        box.append(title_clamp)
+
+        meta = parse_item_metadata(item)
+        parts = []
+        if meta.get("year"):
+            parts.append(meta["year"])
+        if meta.get("type") and meta["type"].lower() not in [p.lower() for p in parts]:
+            parts.append(meta["type"])
+
+        subtitle_text = " • ".join(parts)
+        if not subtitle_text:
+            subtitle_text = item.get("subtitle") or item.get("description") or ""
+
+        subtitle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        subtitle_box.set_halign(Gtk.Align.START)
+        subtitle_box.set_hexpand(True)
+
+        if meta.get("is_explicit"):
+            explicit_lbl = Gtk.Label(label="E")
+            explicit_lbl.set_justify(Gtk.Justification.CENTER)
+            explicit_lbl.set_halign(Gtk.Align.CENTER)
+            explicit_lbl.add_css_class("explicit-badge")
+            subtitle_box.append(explicit_lbl)
+
+        if subtitle_text:
+            subtitle_lbl = Gtk.Label(label=subtitle_text)
+            subtitle_lbl.add_css_class("caption")
+            subtitle_lbl.add_css_class("dim-label")
+            subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            subtitle_lbl.set_lines(1)
+            subtitle_lbl.set_hexpand(True)
+            subtitle_lbl.set_halign(Gtk.Align.START)
+            subtitle_box.append(subtitle_lbl)
+
+        if subtitle_text or meta.get("is_explicit"):
+            subtitle_clamp = Adw.Clamp()
+            subtitle_clamp.set_maximum_size(CARD_SIZE)
+            subtitle_clamp.set_tightening_threshold(CARD_SIZE)
+            subtitle_clamp.set_child(subtitle_box)
+            box.append(subtitle_clamp)
+
+        child._cover_img = img
+
+        child.connect("clicked", lambda btn: self.on_card_clicked(btn))
+
+        gesture = Gtk.GestureClick()
+        gesture.set_button(3)
+        gesture.connect("pressed", self.on_grid_right_click, child)
+        child.add_controller(gesture)
+
+        lp = Gtk.GestureLongPress()
+        lp.connect(
+            "pressed",
+            lambda g, x, y, c=child: self.on_grid_right_click(g, 1, x, y, c),
+        )
+        child.add_controller(lp)
+
+        return child
+
     def _render_items(self, items):
         for item in items:
-            thumb_url = (
-                item.get("thumbnails", [])[-1]["url"]
-                if item.get("thumbnails")
-                else None
-            )
+            card = self._make_card(item)
+            self.flow_box.append(card)
 
-            item_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            item_box.item_data = item
-
-            img = AsyncImage(url=thumb_url, size=140)
-
-            wrapper = Gtk.Box()
-            wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-            wrapper.add_css_class("card")
-            wrapper.set_halign(Gtk.Align.CENTER)
-            wrapper.append(img)
-
-            item_box.append(wrapper)
-
-            lbl = Gtk.Label(label=item.get("title", ""))
-            lbl.set_ellipsize(Pango.EllipsizeMode.END)
-            lbl.set_wrap(True)
-            lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            lbl.set_lines(2)
-            lbl.set_justify(Gtk.Justification.LEFT)
-            lbl.set_halign(Gtk.Align.START)
-
-            text_clamp = Adw.Clamp(maximum_size=140)
-            text_clamp.set_child(lbl)
-            item_box.append(text_clamp)
-
-            # Subtitle (Year / Type / Explicit)
-            meta = parse_item_metadata(item)
-            parts = []
-            if meta["year"]:
-                parts.append(meta["year"])
-            if meta["type"] and meta["type"].lower() not in [p.lower() for p in parts]:
-                parts.append(meta["type"])
-
-            subtitle_text = " • ".join(parts)
-
-            subtitle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-            subtitle_box.set_halign(Gtk.Align.START)
-
-            if subtitle_text:
-                subtitle_lbl = Gtk.Label(label=subtitle_text)
-                subtitle_lbl.add_css_class("caption")
-                subtitle_lbl.add_css_class("dim-label")
-                subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
-                subtitle_box.append(subtitle_lbl)
-
-            if meta["is_explicit"]:
-                explicit_lbl = Gtk.Label(label="E")
-                explicit_lbl.set_justify(Gtk.Justification.CENTER)
-                explicit_lbl.set_halign(Gtk.Align.CENTER)
-                explicit_lbl.add_css_class("explicit-badge")
-                subtitle_box.append(explicit_lbl)
-
-            if subtitle_text or meta["is_explicit"]:
-                subtitle_clamp = Adw.Clamp(maximum_size=140)
-                subtitle_clamp.set_child(subtitle_box)
-                item_box.append(subtitle_clamp)
-
-            self.flow_box.append(item_box)
-
-            gesture = Gtk.GestureClick()
-            gesture.set_button(3)
-            gesture.connect("pressed", self.on_grid_right_click, item_box)
-            item_box.add_controller(gesture)
-
-            # Long Press for touch
-            lp = Gtk.GestureLongPress()
-            lp.connect(
-                "pressed",
-                lambda g, x, y, ib=item_box: self.on_grid_right_click(g, 1, x, y, ib),
-            )
-            item_box.add_controller(lp)
+    def on_card_clicked(self, button):
+        if hasattr(button, "item_data"):
+            self._activate_item_data(button.item_data)
 
     def on_grid_child_activated(self, flowbox, child):
-        box = child.get_child()
-        if not hasattr(box, "item_data"):
-            return
+        target = child.get_child() if hasattr(child, "get_child") else child
+        if hasattr(target, "item_data"):
+            self._activate_item_data(target.item_data)
 
-        item = box.item_data
+    def _activate_item_data(self, item):
         browse_id = item.get("browseId")
         video_id = item.get("videoId")
 
         if browse_id:
-            # Check if it's a playlist or album based on ID prefix or other metadata
-            # Most albums/singles returned by get_artist_albums have a browseId starting with MPREb
             self.open_playlist_callback(browse_id)
         elif video_id:
-            # It's a video!
             app = Gtk.Application.get_default()
             window = app.get_active_window()
             if window and hasattr(window, "player"):

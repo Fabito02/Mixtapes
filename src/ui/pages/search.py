@@ -347,7 +347,7 @@ class SearchPage(Adw.Bin):
         scroll_box = HorizontalScrollBox()
 
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        h_box.set_margin_bottom(12)  # Space for scrollbar if it appears
+        h_box.set_margin_bottom(12)
         
         display_items = items
         if is_category:
@@ -355,14 +355,13 @@ class SearchPage(Adw.Bin):
 
         for item in display_items:
             btn_label = Gtk.Label(label=item.get("title", "Unknown"))
-            # No truncation needed in a scrolled window
             btn_label.set_hexpand(False)
 
             button = Gtk.Button()
             button.set_child(btn_label)
             button.item_data = item
             button.connect("clicked", self.on_grid_button_clicked)
-            button.add_css_class("pill") # Adwaita pill style for genres
+            button.add_css_class("pill")
             h_box.append(button)
 
         if is_category and len(items) > 20:
