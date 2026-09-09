@@ -58,8 +58,8 @@ def _make_flow_grid():
     grid.set_valign(Gtk.Align.START)
     grid.set_align(0)
     grid.set_line_homogeneous(True)
-    grid.set_line_spacing(12)
-    grid.set_child_spacing(12)
+    grid.set_line_spacing(24)
+    grid.set_child_spacing(24)
     grid.set_visible(False)
     return grid
 
