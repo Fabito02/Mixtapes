@@ -1470,11 +1470,9 @@ class AsyncPicture(Gtk.Picture):
             self.set_paintable(None)
             return
 
-        # Notify player of working URL
         if self.player and url and "ytimg.com" in url:
             GLib.idle_add(self._sync_player_url, url)
 
-        # Crop to center square if requested
         if self.crop_to_square and pixbuf:
             w = pixbuf.get_width()
             h = pixbuf.get_height()
@@ -1484,7 +1482,6 @@ class AsyncPicture(Gtk.Picture):
                 y_off = (h - size) // 2
                 pixbuf = pixbuf.new_subpixbuf(x_off, y_off, size, size)
 
-        # Convert to Texture and paint
         texture = Gdk.Texture.new_for_pixbuf(pixbuf)
         self.set_paintable(texture)
         self._is_placeholder = False
@@ -1536,14 +1533,12 @@ class MarqueeLabel(Gtk.ScrolledWindow):
         width = self.get_width()
         label_w = self.label1.get_width()
 
-        # If it fits, don't animate and keep centered/start aligned
         if label_w <= width:
             self.label2.set_visible(False)
             self.get_hadjustment().set_value(0)
             self._is_animating = False
             return True
 
-        # Otherwise, animate
         self.label2.set_visible(True)
         self._is_animating = True
 
@@ -1556,10 +1551,9 @@ class MarqueeLabel(Gtk.ScrolledWindow):
         self._last_frame_time = frame_time
 
         adj = self.get_hadjustment()
-        speed = 40.0  # px/s
+        speed = 40.0
         new_val = adj.get_value() + (speed * delta)
 
-        # Seamless loop point
         loop_point = label_w + self._loop_spacing
         if new_val >= loop_point:
             new_val -= loop_point
@@ -1570,7 +1564,6 @@ class MarqueeLabel(Gtk.ScrolledWindow):
     def set_label(self, text):
         self.label1.set_label(text)
         self.label2.set_label(text)
-        # Reset scroll on text change
         self.get_hadjustment().set_value(0)
         if hasattr(self, "_last_frame_time"):
             delattr(self, "_last_frame_time")
@@ -1592,24 +1585,22 @@ class LikeButton(Gtk.Button):
 
     def update_icon(self):
         if self.status == "LIKE":
-            self.set_icon_name("starred-symbolic")
-            self.add_css_class("liked-button")  # For potential CSS styling
+            self.set_icon_name("heart-filled-symbolic")
+            self.add_css_class("liked-button")
             self.set_tooltip_text("Unlike")
         elif self.status == "DISLIKE":
             self.set_icon_name(
                 "view-restore-symbolic"
-            )  # Placeholder or specific icon if found
+            )
             self.set_tooltip_text("Disliked")
         else:
-            self.set_icon_name("non-starred-symbolic")
+            self.set_icon_name("heart-outline-thick-symbolic")
             self.remove_css_class("liked-button")
             self.set_tooltip_text("Like")
 
     def on_clicked(self, btn):
-        # Toggle: LIKE -> INDIFFERENT, others -> LIKE
         new_status = "INDIFFERENT" if self.status == "LIKE" else "LIKE"
 
-        # Optimistic update
         old_status = self.status
         self.status = new_status
         self.update_icon()
@@ -1617,12 +1608,8 @@ class LikeButton(Gtk.Button):
         def do_rate():
             success = self.client.rate_song(self.video_id, new_status)
             if not success:
-                # Revert on failure
                 GLib.idle_add(self.revert, old_status)
             else:
-                # if disliked, invalidate Liked Music playlist cache
-                # this avoids the regression skip
-                # normal playlists have a similar functionality to invalidate cache when a track is removed
                 if new_status == "INDIFFERENT":
                     from player.downloads import get_download_db
                     get_download_db().invalidate_playlist_cache("LM")

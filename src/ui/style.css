@@ -624,3 +624,8 @@ window > windowhandle,
 .lyrics-line-static > label {
   opacity: 0.9;
 }
+
+/* Liked button */
+.liked-button {
+  color: @accent_color;
+}
