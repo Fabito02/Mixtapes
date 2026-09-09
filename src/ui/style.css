@@ -189,10 +189,10 @@ listboxrow.song-row-wrapper {
 
 /* Song Row Base Styling */
 box.song-row {
-  border-radius: 10px;
+  border-radius: 12px;
   transition: background-color 200ms ease;
   min-height: 56px;
-  padding: 6px 8px; /* Reduced padding and height */
+  padding: 6px;
 }
 
 /* Only apply custom hover in the main playlist/search list views */
@@ -295,13 +295,13 @@ popover.menu modelbutton {
 picture.song-img {
   min-width: 56px;
   min-height: 56px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 /* Compact mode */
 .compact box.song-row {
   min-height: 44px;
-  padding: 4px 8px;
+  padding: 6px;
 }
 
 .compact picture.song-img {
@@ -319,30 +319,8 @@ listview.playlist-view > row:disabled {
 
 /* Horizontal Grid Item Hover */
 .artist-horizontal-item {
-  padding: 8px;
-  border-radius: 12px;
-  transition: background-color 200ms ease;
-}
-
-/* Compact (mobile) reduces per-card hover padding so two 160 px cards
-   still fit side by side at 360 px page width without clipping. */
-.compact .artist-horizontal-item {
-  padding: 4px;
-}
-
-.artist-horizontal-item:hover {
-  background-color: @row_hover;
-}
-
-.artist-horizontal-item:active {
-  background-color: alpha(currentColor, 0.15);
-}
-
-/* Keyboard focus ring for the home horizontal cards (now focusable). Follows
-   the item's 12px radius; keyboard-only so mouse clicks don't flash a ring. */
-.artist-horizontal-item:focus-visible {
-  outline: 2px solid @accent_color;
-  outline-offset: -2px;
+  padding: 10px;
+  border-radius: 16px;
 }
 
 .explicit-badge {
@@ -387,11 +365,8 @@ listview.playlist-view > row:disabled {
 
 /* Spotify-style speed-dial tile: thumbnail on the left, title on the right. */
 .home-speed-tile {
-  padding: 6px 12px 6px 6px;
-  border-radius: 8px;
-  background-color: alpha(currentColor, 0.06);
-  min-height: 64px;
-  transition: background-color 150ms ease;
+  padding: 8px;
+  border-radius: 12px;
 }
 
 /* In compact (mobile) layout the page surfaces more tiles per screen
@@ -399,17 +374,7 @@ listview.playlist-view > row:disabled {
    AsyncImage.set_compact, so the row is comfortable at ~52 px tall
    with tighter padding. */
 .compact .home-speed-tile {
-  padding: 4px 10px 4px 4px;
-  min-height: 52px;
-}
-
-.home-speed-tile:hover {
-  background-color: alpha(currentColor, 0.12);
-}
-
-flowboxchild:active .home-speed-tile,
-.home-speed-tile:active {
-  background-color: alpha(currentColor, 0.18);
+  padding: 6px;
 }
 
 flowboxchild {
@@ -431,12 +396,22 @@ flowboxchild:focus-visible {
 }
 
 .home-speed-cover {
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .home-speed-title {
   font-weight: 600;
   font-size: 0.95em;
+}
+
+.library-card {
+  border-radius: 16px;
+  padding: 10px;
+}
+
+.card-cover {
+  border-radius: 12px;
+  margin-bottom: 8px;
 }
 
 /* Header strapline cover (album/artist photo for "Based on X" rows). */

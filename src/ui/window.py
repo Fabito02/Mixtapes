@@ -218,28 +218,6 @@ window.cover-bg-active .banner-scrim {
   );
 }
 
-/* Playing row over the blurred cover, keeping its accent color. The old
-   13% wash could not support one: across 80 covers an accent-tinted
-   label measured 1.0 to 1.2:1. A translucent surface of the row's own
-   buys it back. _refresh_derived_colors computes both tokens against the
-   normalized backdrop band.
-
-   `list row.playing` is the ListBox shape (Home, Explore, search). The
-   selector read `listboxrow.song-row-wrapper.playing` before, which
-   matches nothing: the CSS node is `row`, and no widget carries that
-   class. */
-window.cover-bg-active box.song-row.playing,
-window.cover-bg-active list row.playing,
-window.cover-bg-active .queue-row.playing {
-  background-color: @playing_surface_over_blur;
-  color: @playing_fg_over_blur;
-}
-window.cover-bg-active box.song-row.playing label,
-window.cover-bg-active list row.playing label,
-window.cover-bg-active .queue-row.playing label {
-  color: @playing_fg_over_blur;
-}
-
 /* Context menus keep regular text. A popover is a CSS child of the row
    it is parented to, so it inherits the color above. */
 window.cover-bg-active box.song-row.playing popover label,
@@ -280,6 +258,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_default_size(1000, 700)
         self.set_title("Mixtapes")
         self._is_compact = False
+
+        self._last_dominant_rgb = None
 
 
         # Add custom icons path relative to current file or project root
@@ -643,17 +623,17 @@ class MainWindow(Adw.ApplicationWindow):
         # the system accent, or the high-contrast preference changes.
         # Each moves the background or the color measured against.
         try:
-            style_manager = Adw.StyleManager.get_default()
-            style_manager.connect(
+            self._style_manager = Adw.StyleManager.get_default()
+            self._style_manager.connect(
                 "notify::dark", self._on_color_scheme_changed
             )
             for prop in ("accent-color", "high-contrast"):
-                style_manager.connect(
+                self._style_manager.connect(
                     f"notify::{prop}",
                     lambda *_: self._refresh_derived_colors(),
                 )
         except Exception:
-            pass
+            self._style_manager = None
         self._apply_appearance_prefs_initial()
 
         # Initialize Pages (Must be before breakpoint)
@@ -873,16 +853,17 @@ class MainWindow(Adw.ApplicationWindow):
         # Re-run them, or the chrome stays on the old scheme's values
         # until the next track change.
         prefs = self._read_appearance_prefs()
-        if prefs["blurred_background"] and self._last_cover_url:
-            self._update_blurred_background(self._last_cover_url)
-        if prefs["dynamic_accent"] and self._last_cover_url:
-            # Recomputed against the new scheme; drop the old scheme's
-            # result first so nothing derives from it in the meantime
-            # (the cover color arrives on a worker thread).
+        
+        if prefs.get("dynamic_accent") and getattr(self, "_last_dominant_rgb", None):
+            self._set_dynamic_accent(self._last_dominant_rgb)
+        elif prefs.get("dynamic_accent") and self._last_cover_url:
             self._accent_override = None
             self._update_dynamic_accent(self._last_cover_url)
-        if prefs["tinted_background"]:
-            self._refresh_derived_colors()
+    
+        if prefs.get("blurred_background") and self._last_cover_url:
+            self._update_blurred_background(self._last_cover_url)
+    
+        self._refresh_derived_colors()
     def _update_blurred_background(self, thumb_url):
         from ui.cover_effects import get_blurred_cover
 
@@ -968,8 +949,9 @@ class MainWindow(Adw.ApplicationWindow):
         get_dominant_color(thumb_url, callback=_apply)
 
     def _is_dark(self):
+        sm = getattr(self, "_style_manager", None) or Adw.StyleManager.get_default()
         try:
-            return Adw.StyleManager.get_default().get_dark()
+            return sm.get_dark()
         except Exception:
             return True
 
@@ -984,6 +966,7 @@ class MainWindow(Adw.ApplicationWindow):
         return color_utils.WCAG_AA
 
     def _set_dynamic_accent(self, rgb):
+        self._last_dominant_rgb = rgb
         prefs = self._read_appearance_prefs()
         
         is_dark = self._is_dark()
@@ -1084,6 +1067,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_derived_colors()
 
     def _clear_dynamic_accent(self):
+        self._last_dominant_rgb = None
+        
         try:
             self._dynamic_accent_css.load_from_string("")
             self.remove_css_class("tinted")
@@ -1170,8 +1155,6 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             self._derived_css.load_from_string(
                 f"@define-color playing_fg {color_utils.to_css(fg)};\n"
-                f"@define-color playing_fg_over_blur "
-                f"{color_utils.to_css(over_blur)};\n"
                 f"@define-color playing_surface_over_blur "
                 f"{rgba(overlay, BLUR_ROW_OPACITY)};\n"
                 f"@define-color blur_panel_bg "
@@ -1652,9 +1635,12 @@ class MainWindow(Adw.ApplicationWindow):
             def _on_toggled(button, v=value):
                 if self._theme_swatch_syncing or not button.get_active():
                     return
-                self.activate_action(
-                    "color-scheme", GLib.Variant.new_string(v)
-                )
+                current_action = self.lookup_action("color-scheme")
+                if current_action:
+                    current_val = current_action.get_state().get_string()
+                    if current_val == v:
+                        return
+                self.activate_action("color-scheme", GLib.Variant.new_string(v))
 
             cb.connect("toggled", _on_toggled)
             row.append(cb)
@@ -2233,7 +2219,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _apply_color_scheme(self, value):
         scheme = self._COLOR_SCHEME_MAP.get(value, Adw.ColorScheme.DEFAULT)
-        Adw.StyleManager.get_default().set_color_scheme(scheme)
+        sm = getattr(self, "_style_manager", None) or Adw.StyleManager.get_default()
+        sm.set_color_scheme(scheme)
 
     def _on_color_scheme_action(self, action, value):
         s = value.get_string() if value is not None else "default"

@@ -51,38 +51,28 @@ def _set_library_view_mode_pref(mode):
 
 
 def _make_flow_grid():
-    """Shared FlowBox config matching DiscographyPage's card grid.
+    """Shared WrapBox config matching DiscographyPage's card grid.
     Spacing is 0 so the gutter comes purely from each card's own margins
     + the `.card` wrapper padding."""
-    grid = Gtk.FlowBox()
+    grid = Adw.WrapBox()
     grid.set_valign(Gtk.Align.START)
-    grid.set_selection_mode(Gtk.SelectionMode.NONE)
-    grid.set_homogeneous(True)
-    grid.set_max_children_per_line(5)
-    grid.set_min_children_per_line(2)
-    grid.set_row_spacing(0)
-    grid.set_column_spacing(0)
-    grid.set_activate_on_single_click(True)
+    grid.set_line_homogeneous(True)
+    grid.set_line_spacing(12)
+    grid.set_child_spacing(12)
     grid.set_visible(False)
     return grid
 
 
-def _make_library_card(player, title, subtitle, thumb_url, fallback_icon):
-    """Vertical cover-on-top card matching DiscographyPage. Returns the
-    FlowBoxChild plus the inner AsyncImage so the caller can attach
-    identifiers or reload the cover later."""
+def _make_library_card(player, title, subtitle, thumb_url, fallback_icon, on_clicked=None):
     from ui.utils import AsyncImage
 
-    child = Gtk.FlowBoxChild()
+    child = Gtk.Button()
+    child.add_css_class("activatable")
     child.add_css_class("library-card")
+    child.add_css_class("flat")
 
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-    box.set_halign(Gtk.Align.CENTER)
-    # Vertical breathing room so rows don't run into each other. Horizontal
-    # gutter is contributed by the FlowBox cell width; this balances that
-    # out with a matching gap between rows.
-    box.set_margin_top(8)
-    box.set_margin_bottom(8)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+    child.set_child(box)
 
     img = AsyncImage(url=thumb_url, size=160, player=player)
     if not thumb_url and fallback_icon:
@@ -90,7 +80,7 @@ def _make_library_card(player, title, subtitle, thumb_url, fallback_icon):
 
     wrapper = Gtk.Box()
     wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-    wrapper.add_css_class("card")
+    wrapper.add_css_class("card-cover")
     wrapper.set_halign(Gtk.Align.CENTER)
     wrapper.append(img)
     box.append(wrapper)
@@ -103,7 +93,7 @@ def _make_library_card(player, title, subtitle, thumb_url, fallback_icon):
     title_label.set_lines(2)
     title_label.set_justify(Gtk.Justification.LEFT)
     title_label.set_tooltip_text(title)
-    title_clamp = Adw.Clamp(maximum_size=160)
+    title_clamp = Adw.Clamp()
     title_clamp.set_child(title_label)
     box.append(title_clamp)
 
@@ -113,13 +103,15 @@ def _make_library_card(player, title, subtitle, thumb_url, fallback_icon):
         subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
         subtitle_label.add_css_class("dim-label")
         subtitle_label.add_css_class("caption")
-        subtitle_clamp = Adw.Clamp(maximum_size=160)
+        subtitle_clamp = Adw.Clamp()
         subtitle_clamp.set_child(subtitle_label)
         box.append(subtitle_clamp)
 
-    child.set_child(box)
     child._cover_img = img
     child._search_title = title
+
+    if on_clicked:
+        child.connect("clicked", lambda btn: on_clicked(btn))
     return child
 
 
@@ -277,7 +269,6 @@ class LibraryPage(Adw.Bin):
         playlists_section.append(self.playlists_list)
 
         self.playlists_grid = _make_flow_grid()
-        self.playlists_grid.connect("child-activated", self._on_playlist_grid_activated)
         playlists_section.append(self.playlists_grid)
 
         self.lib_content_box.append(playlists_section)
@@ -304,7 +295,6 @@ class LibraryPage(Adw.Bin):
         albums_section.append(self.albums_list)
 
         self.albums_grid = _make_flow_grid()
-        self.albums_grid.connect("child-activated", self._on_album_grid_activated)
         albums_section.append(self.albums_grid)
 
         self.lib_content_box.append(albums_section)
@@ -331,7 +321,6 @@ class LibraryPage(Adw.Bin):
         artists_section.append(self.artists_list)
 
         self.artists_grid = _make_flow_grid()
-        self.artists_grid.connect("child-activated", self._on_artist_grid_activated)
         artists_section.append(self.artists_grid)
 
         self.lib_content_box.append(artists_section)
@@ -486,7 +475,7 @@ class LibraryPage(Adw.Bin):
             row.set_visible(matches(getattr(row, "artist_name", "")))
             row = row.get_next_sibling()
 
-        # Mirror the filter into the desktop FlowBox grids if they exist.
+        # Mirror the filter into the desktop WrapBox grids if they exist.
         # Album cards store their `album_data` so artists can be matched too.
         for grid_attr in ("playlists_grid", "albums_grid", "artists_grid"):
             grid = getattr(self, grid_attr, None)
@@ -522,7 +511,7 @@ class LibraryPage(Adw.Bin):
             section.set_visible(has_any)
 
     def _apply_library_layout(self, compact):
-        """Show the mobile ListBox or the desktop FlowBox grid for each section.
+        """Show the mobile ListBox or the desktop WrapBox grid for each section.
 
         The chosen mode comes from an explicit user pref ("list"/"grid") if
         set, otherwise auto-selects based on compact state."""
@@ -559,15 +548,22 @@ class LibraryPage(Adw.Bin):
 
     # ── Desktop grid ──────────────────────────────────────────────────────
 
-    def _clear_flowbox(self, flowbox):
-        child = flowbox.get_first_child()
+    def _clear_wrapbox(self, wrapbox):
+        child = wrapbox.get_first_child()
         while child:
             nxt = child.get_next_sibling()
-            flowbox.remove(child)
+            wrapbox.remove(child)
             child = nxt
 
-    def _make_card_base(self, title, subtitle, thumb_url, fallback_icon):
-        return _make_library_card(self.player, title, subtitle, thumb_url, fallback_icon)
+    def _make_card_base(self, title, subtitle, thumb_url, fallback_icon, on_clicked=None):
+        return _make_library_card(
+            self.player,
+            title,
+            subtitle,
+            thumb_url,
+            fallback_icon,
+            on_clicked=on_clicked or self._on_playlist_grid_activated
+        )
 
     @staticmethod
     def _build_overlay_loader(text):
@@ -588,7 +584,7 @@ class LibraryPage(Adw.Bin):
         return wrap
 
     def _attach_right_click(self, widget, handler):
-        """Wire right-click + long-press on a FlowBoxChild so its
+        """Wire right-click + long-press on a WrapBoxChild so its
         context menu matches what list-view rows get."""
         click = Gtk.GestureClick()
         click.set_button(3)
@@ -603,12 +599,12 @@ class LibraryPage(Adw.Bin):
         widget.add_controller(lp)
 
     @staticmethod
-    def _index_flowbox(flowbox, id_attr):
-        """Map stored id → existing FlowBoxChild so we can update rather than
+    def _index_wrapbox(wrapbox, id_attr):
+        """Map stored id → existing WrapBoxChild so we can update rather than
         recreate on subsequent refreshes. Avoids the placeholder-icon flash
         when returning to the Library after visiting a playlist."""
         index = {}
-        child = flowbox.get_first_child()
+        child = wrapbox.get_first_child()
         while child:
             key = getattr(child, id_attr, None)
             if key:
@@ -626,7 +622,7 @@ class LibraryPage(Adw.Bin):
         clamp = outer.get_first_child()
         if clamp is None:
             return
-        clamp = clamp.get_next_sibling()  # skip image wrapper
+        clamp = clamp.get_next_sibling()
         if clamp is not None:
             lbl = clamp.get_child() if hasattr(clamp, "get_child") else None
             if isinstance(lbl, Gtk.Label) and lbl.get_label() != title:
@@ -639,11 +635,11 @@ class LibraryPage(Adw.Bin):
             if isinstance(sub_lbl, Gtk.Label) and sub_lbl.get_label() != (subtitle or ""):
                 sub_lbl.set_label(subtitle or "")
 
-    def _reconcile_grid(self, flowbox, items, id_attr, build_card):
+    def _reconcile_grid(self, wrapbox, items, id_attr, build_card):
         """Reuse existing cards for known ids, build cards for new items,
-        remove cards whose ids are gone. `build_card(item) -> FlowBoxChild`
+        remove cards whose ids are gone. `build_card(item) -> WrapBoxChild`
         is called only for genuinely-new items."""
-        existing = self._index_flowbox(flowbox, id_attr)
+        existing = self._index_wrapbox(wrapbox, id_attr)
         processed = set()
         desired_order = []
 
@@ -659,17 +655,18 @@ class LibraryPage(Adw.Bin):
         # Remove stale cards.
         for key, card in existing.items():
             if key not in processed:
-                flowbox.remove(card)
+                wrapbox.remove(card)
 
-        # Re-order: walk the flowbox and move children that are out of order.
-        # FlowBox doesn't have a native reorder, so we remove + re-append for
+        # Re-order: walk the WrapBox and move children that are out of order.
+        # WrapBox doesn't have a native reorder, so we remove + re-append for
         # mismatched positions. That's acceptable — only changed slots move.
-        for expected_idx, card in enumerate(desired_order):
-            actual = flowbox.get_child_at_index(expected_idx)
-            if actual is not card:
-                if card.get_parent() is flowbox:
-                    flowbox.remove(card)
-                flowbox.insert(card, expected_idx)
+        prev_child = None
+        for card in desired_order:
+            if card.get_parent() is not wrapbox:
+                wrapbox.insert_child_after(card, prev_child)
+            else:
+                wrapbox.reorder_child_after(card, prev_child)
+            prev_child = card
 
     def _rebuild_playlists_grid(self, playlists):
         from ui.utils import is_online
@@ -763,7 +760,8 @@ class LibraryPage(Adw.Bin):
                     img.load_url(thumb_url)
                 return card
             card = self._make_card_base(
-                title, subtitle, thumb_url, "media-optical-symbolic"
+                title, subtitle, thumb_url, "media-optical-symbolic",
+                on_clicked=self._on_album_grid_activated
             )
             card._album_id = browse_id
             card._album_data = album
@@ -796,7 +794,8 @@ class LibraryPage(Adw.Bin):
                     img.load_url(thumb_url)
                 return card
             card = self._make_card_base(
-                name, subscribers, thumb_url, "avatar-default-symbolic"
+                name, subscribers, thumb_url, "avatar-default-symbolic",
+                on_clicked=self._on_artist_grid_activated
             )
             card._artist_id = a_id
             card._artist_name = name
@@ -804,7 +803,7 @@ class LibraryPage(Adw.Bin):
 
         self._reconcile_grid(self.artists_grid, artists, "_artist_id", build)
 
-    def _on_playlist_grid_activated(self, flowbox, child):
+    def _on_playlist_grid_activated(self, child, *args):
         p_id = getattr(child, "_playlist_id", None)
         if not p_id:
             return
@@ -813,9 +812,10 @@ class LibraryPage(Adw.Bin):
             "thumb": child._cover_img.url if hasattr(child, "_cover_img") else None,
         }
         self.open_playlist_callback(p_id, initial_data)
-
-    def _on_album_grid_activated(self, flowbox, child):
-        if not hasattr(child, "_album_id"):
+    
+    def _on_album_grid_activated(self, child, *args):
+        album_id = getattr(child, "_album_id", None)
+        if not album_id:
             return
         album = getattr(child, "_album_data", {})
         initial_data = {
@@ -824,14 +824,15 @@ class LibraryPage(Adw.Bin):
             if album.get("thumbnails")
             else None,
         }
-        self.open_playlist_callback(child._album_id, initial_data)
-
-    def _on_artist_grid_activated(self, flowbox, child):
-        if not hasattr(child, "_artist_id"):
+        self.open_playlist_callback(album_id, initial_data)
+    
+    def _on_artist_grid_activated(self, child, *args):
+        artist_id = getattr(child, "_artist_id", None)
+        if not artist_id:
             return
         root = self.get_root()
         if hasattr(root, "open_artist"):
-            root.open_artist(child._artist_id, getattr(child, "_artist_name", None))
+            root.open_artist(artist_id, getattr(child, "_artist_name", None))
 
     def _propagate_compact(self, widget, compact):
         if hasattr(widget, 'set_compact') and hasattr(widget, 'target_size'):
@@ -1718,7 +1719,6 @@ class UploadsPage(Gtk.Box):
         self.albums_section.append(self.albums_list)
 
         self.albums_grid = _make_flow_grid()
-        self.albums_grid.connect("child-activated", self._on_album_grid_activated)
         self.albums_section.append(self.albums_grid)
         self.content_box.append(self.albums_section)
 
@@ -1736,7 +1736,6 @@ class UploadsPage(Gtk.Box):
         self.artists_section.append(self.artists_list)
 
         self.artists_grid = _make_flow_grid()
-        self.artists_grid.connect("child-activated", self._on_artist_grid_activated)
         self.artists_section.append(self.artists_grid)
         self.content_box.append(self.artists_section)
 
@@ -1890,7 +1889,7 @@ class UploadsPage(Gtk.Box):
             self._update_section_visibility()
 
     def _apply_layout_pref(self):
-        """Show ListBox or FlowBox based on the shared library pref."""
+        """Show ListBox or WrapBox based on the shared library pref."""
         mode = _get_library_view_mode_pref()
         root = self.get_root()
         compact = bool(getattr(root, "_is_compact", False)) if root else False
@@ -1924,7 +1923,7 @@ class UploadsPage(Gtk.Box):
             thumbs = album.get("thumbnails") or []
             thumb_url = thumbs[-1]["url"] if thumbs else None
             card = _make_library_card(
-                self.player, title, artist_str, thumb_url, "media-optical-symbolic"
+                self.player, title, artist_str, thumb_url, "media-optical-symbolic", on_clicked=self._on_album_grid_activated
             )
             card._album_data = album
             self.albums_grid.append(card)
@@ -1936,12 +1935,12 @@ class UploadsPage(Gtk.Box):
             thumbs = artist.get("thumbnails") or []
             thumb_url = thumbs[-1]["url"] if thumbs else None
             card = _make_library_card(
-                self.player, name, subtitle, thumb_url, "avatar-default-symbolic"
+                self.player, name, subtitle, thumb_url, "avatar-default-symbolic", on_clicked=self._on_artist_grid_activated
             )
             card._artist_data = artist
             self.artists_grid.append(card)
 
-    def _on_album_grid_activated(self, flowbox, child):
+    def _on_album_grid_activated(self, wrapbox, child):
         album = getattr(child, "_album_data", None)
         if not album:
             return
@@ -1957,7 +1956,7 @@ class UploadsPage(Gtk.Box):
             },
         )
 
-    def _on_artist_grid_activated(self, flowbox, child):
+    def _on_artist_grid_activated(self, wrapbox, child):
         artist = getattr(child, "_artist_data", None)
         if not artist:
             return

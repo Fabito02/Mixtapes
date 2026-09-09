@@ -530,7 +530,7 @@ class HomePage(Adw.Bin):
         for sec in sections:
             title = (sec.get("title") or "").lower()
             if "quick pick" in title:
-                speed_items = sec["contents"][:8]
+                speed_items = sec["contents"]
                 speed_consumed = sec
                 break
         if speed_consumed is not None:
@@ -538,10 +538,10 @@ class HomePage(Adw.Bin):
         if not speed_items and sections:
             for sec in sections:
                 if _classify_section(sec.get("title")) == "listen_again":
-                    speed_items = sec["contents"][:8]
+                    speed_items = sec["contents"]
                     break
             else:
-                speed_items = sections[0]["contents"][:8]
+                speed_items = sections[0]["contents"]
 
         if speed_items:
             self._add_speed_dial(speed_items)
@@ -614,15 +614,15 @@ class HomePage(Adw.Bin):
 
         section_box.append(self._make_section_header("Quick picks"))
 
-        flow = Gtk.FlowBox()
-        flow.set_selection_mode(Gtk.SelectionMode.NONE)
-        flow.set_min_children_per_line(2)
-        flow.set_max_children_per_line(4)
-        flow.set_homogeneous(True)
-        flow.set_column_spacing(8)
-        flow.set_row_spacing(8)
-        flow.set_activate_on_single_click(True)
-        flow.connect("child-activated", self._on_speed_tile_activated)
+        scroll_box = HorizontalScrollBox()
+
+        wrap = Adw.WrapBox(orientation=Gtk.Orientation.VERTICAL)
+        wrap.set_line_homogeneous(True)
+        wrap.set_line_spacing(8)
+        wrap.set_child_spacing(8)
+
+        wrap.set_size_request(-1, 250)
+        wrap.set_valign(Gtk.Align.START)
 
         section_title = "Quick picks"
         playable_pool = [it for it in items if _detect_kind(it, section_title) in ("song", "video")]
@@ -631,21 +631,29 @@ class HomePage(Adw.Bin):
             kind = _detect_kind(item, section_title)
             if not kind:
                 continue
-            tile = self._build_speed_tile(item, kind, playable_pool)
-            flow_child = Gtk.FlowBoxChild()
-            flow_child.set_focusable(True)
-            flow_child.item_data = item
-            flow_child.item_kind = kind
-            flow_child.queue_pool = playable_pool
-            flow_child.set_child(tile)
-            flow.append(flow_child)
 
-        section_box.append(flow)
+            tile = self._build_speed_tile(
+                item, kind, playable_pool,
+                on_clicked=lambda btn, it=item, k=kind, pool=playable_pool: self._activate_item(it, k, pool)
+            )
+            wrap.append(tile)
 
-    def _build_speed_tile(self, item, kind, playable_pool):
-        tile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        scroll_box.set_content(wrap)
+        section_box.append(scroll_box)
+
+    def _build_speed_tile(self, item, kind, playable_pool, on_clicked=None):
+        tile = Gtk.Button()
         tile.add_css_class("home-speed-tile")
-        tile.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
+        tile.add_css_class("card")
+        tile.add_css_class("activatable")
+
+        root = self.get_root()
+        compact = bool(getattr(root, "_is_compact", False)) if root else self._compact
+        tile_width = 200 if compact else 240
+        tile.set_size_request(tile_width, -1)
+        
+        inner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        tile.set_child(inner_box)
 
         thumb_url = (
             (item.get("thumbnails") or [{}])[-1].get("url")
@@ -659,10 +667,9 @@ class HomePage(Adw.Bin):
         wrapper.add_css_class("home-speed-cover")
         wrapper.set_valign(Gtk.Align.CENTER)
         wrapper.append(img)
-        tile.append(wrapper)
+        inner_box.append(wrapper)
 
-        # Title + kind subtitle stacked vertically next to the cover. Two
-        # short lines max so a row of 4 tiles still reads cleanly.
+        # Title + kind subtitle stacked vertically next to the cover
         text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_col.set_valign(Gtk.Align.CENTER)
         text_col.set_hexpand(True)
@@ -677,20 +684,21 @@ class HomePage(Adw.Bin):
         title_label.add_css_class("home-speed-title")
         text_col.append(title_label)
 
-        # Speed tile: icon yes, kind word no — saves a chunk of width
-        # ("Song · ", "Video · " etc. ate ~6-8 chars otherwise) so the
-        # title + artist read better, especially in compact mode.
         text_col.append(
             self._build_kind_subtitle(
                 item, kind, dim=True, include_kind=True, include_kind_word=False
             )
         )
-        tile.append(text_col)
+        inner_box.append(text_col)
+
+        if on_clicked:
+            tile.connect("clicked", lambda btn: on_clicked(tile))
 
         right = Gtk.GestureClick()
         right.set_button(3)
         right.connect("released", self._on_tile_right_click, tile, item, kind)
         tile.add_controller(right)
+
         lp = Gtk.GestureLongPress()
         lp.connect(
             "pressed",
@@ -745,6 +753,7 @@ class HomePage(Adw.Bin):
 
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("song-row")
+            
             row.set_child(box)
             # Light up the row while this track is the one playing —
             # home rows are built ad-hoc (not SongRowWidget), so they
@@ -800,14 +809,11 @@ class HomePage(Adw.Bin):
 
     def _add_card_strip(self, section_box, items, bucket=None, section_title=""):
         scroll_box = HorizontalScrollBox()
-        h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        h_box.set_margin_bottom(8)
-        # Track strips so set_compact_mode can tighten their gaps on
-        # mobile widths (default 16 px → 8 px in compact).
+        h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        h_box.set_margin_bottom(24)
         if not hasattr(self, "_card_strips"):
             self._card_strips = []
         self._card_strips.append(h_box)
-        h_box.set_spacing(8 if getattr(self, "_compact", False) else 16)
 
         for item in items:
             kind = _detect_kind(item, section_title)
@@ -821,14 +827,18 @@ class HomePage(Adw.Bin):
         section_box.append(scroll_box)
 
     def _build_card(self, item, kind, siblings, section_title=""):
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card = Gtk.Button()
+        card.add_css_class("activatable")
         card.add_css_class("artist-horizontal-item")
-        card.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
+        card.add_css_class("flat")
         card.item_data = item
         card.item_kind = kind
         card.queue_pool = [
             it for it in siblings if _detect_kind(it, section_title) in ("song", "video")
         ]
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.set_child(box)
 
         thumb_url = (
             (item.get("thumbnails") or [{}])[-1].get("url")
@@ -839,10 +849,10 @@ class HomePage(Adw.Bin):
 
         wrapper = Gtk.Box()
         wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-        wrapper.add_css_class("card")
+        wrapper.add_css_class("card-cover")
         wrapper.set_halign(Gtk.Align.CENTER)
         wrapper.append(img)
-        card.append(wrapper)
+        box.append(wrapper)
 
         title_lbl = Gtk.Label(label=item.get("title", ""))
         title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
@@ -851,19 +861,16 @@ class HomePage(Adw.Bin):
         title_lbl.set_lines(2)
         title_lbl.set_justify(Gtk.Justification.LEFT)
         title_lbl.set_halign(Gtk.Align.START)
-        title_clamp = Adw.Clamp(maximum_size=CARD_SIZE)
+        title_clamp = Adw.Clamp()
         title_clamp.set_child(title_lbl)
-        card.append(title_clamp)
+        box.append(title_clamp)
 
         sub_widget = self._build_kind_subtitle(item, kind, dim=True, include_kind=True)
-        sub_clamp = Adw.Clamp(maximum_size=CARD_SIZE)
+        sub_clamp = Adw.Clamp()
         sub_clamp.set_child(sub_widget)
-        card.append(sub_clamp)
+        box.append(sub_clamp)
 
-        click = Gtk.GestureClick()
-        click.set_button(1)
-        click.connect("released", self._on_card_clicked, card)
-        card.add_controller(click)
+        card.connect("clicked", self._on_card_clicked)
 
         right = Gtk.GestureClick()
         right.set_button(3)
@@ -877,20 +884,7 @@ class HomePage(Adw.Bin):
         )
         card.add_controller(lp)
 
-        # Keyboard accessibility: these cards are plain Gtk.Box widgets driven
-        # by click gestures, so without this they were unreachable by Tab and
-        # un-activatable from the keyboard. Make them focusable, expose a label
-        # to assistive tech, and activate on Enter/Space (mirroring a click).
-        card.set_focusable(True)
-        card.update_property(
-            [Gtk.AccessibleProperty.LABEL], [item.get("title", "")]
-        )
-        key = Gtk.EventControllerKey()
-        key.connect("key-pressed", self._on_card_key, card)
-        card.add_controller(key)
-
         return card
-
     def _on_card_key(self, controller, keyval, keycode, state, card):
         if keyval in (
             Gdk.KEY_Return,
@@ -963,8 +957,8 @@ class HomePage(Adw.Bin):
 
     # ─── Activation ────────────────────────────────────────────────────────
 
-    def _on_card_clicked(self, gesture, n_press, x, y, card):
-        self._activate_item(card.item_data, card.item_kind, getattr(card, "queue_pool", None))
+    def _on_card_clicked(self, button):
+        self._activate_item(button.item_data, button.item_kind, getattr(button, "queue_pool", None))
 
     def _on_song_row_activated(self, listbox, row):
         self._activate_item(row.item_data, row.item_kind, getattr(row, "queue_pool", None))
