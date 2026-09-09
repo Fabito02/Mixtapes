@@ -243,7 +243,7 @@ popover.menu modelbutton {
   color: @popover_fg_color;
 }
 
-picture.song-img, label.song-index {
+picture.song-img, .song-img, label.song-index {
   min-width: 56px;
   min-height: 56px;
   border-radius: 8px;
@@ -254,9 +254,28 @@ picture.song-img, label.song-index {
   padding: 6px;
 }
 
-.compact picture.song-img, .compact label.song-index {
+.compact picture.song-img, .compact .song-img, .compact label.song-index {
   min-width: 44px;
   min-height: 44px;
+}
+
+.song-download-icon {
+    background: linear-gradient(
+      135deg,
+      mix(var(--accent-bg-color), white, 0.50) 0%,
+      var(--accent-bg-color) 40%,
+      var(--accent-bg-color) 60%,
+      mix(var(--accent-bg-color), black, 0.35) 100%
+    );
+    color: mix(@accent_bg_color, white, 0.8);  
+}
+
+.song-download-icon image {
+    -gtk-icon-size: 26px;
+}
+
+.compact .song-download-icon image {
+    -gtk-icon-size: 20px;
 }
 
 .compact box.song-row label {
@@ -374,6 +393,47 @@ flowboxchild:focus-visible {
 .card-cover {
   border-radius: 12px;
   margin-bottom: 8px;
+  min-width: 150px;
+  min-height: 150px;
+}
+
+.compact .card-cover {
+  min-width: 130px;
+  min-height: 130px;
+}
+
+.card-cover-img {
+  min-width: 150px;
+  min-height: 150px;
+  -gtk-icon-size: 150px;
+}
+
+.compact .card-cover-img {
+  min-width: 130px;
+  min-height: 130px;
+  -gtk-icon-size: 130px;
+}
+
+.card-download-icon {
+    border-radius: 12px;
+    margin-bottom: 8px;
+    min-width: 150px;
+    min-height: 150px;
+    background: linear-gradient(
+      135deg,
+      mix(var(--accent-bg-color), white, 0.35) 0%,
+      var(--accent-bg-color) 40%,
+      var(--accent-bg-color) 60%,
+      mix(var(--accent-bg-color), black, 0.35) 100%
+    );
+    color: mix(@accent_bg_color, white, 0.8);
+    -gtk-icon-size: 60px;
+}
+
+.compact .card-download-icon {
+  -gtk-icon-size: 52px;
+  min-width: 130px;
+  min-height: 130px;
 }
 
 /* Header strapline cover (album/artist photo for "Based on X" rows). */
@@ -530,7 +590,7 @@ window > windowhandle,
   padding-bottom: 14px;
   padding-right: 16px;
   padding-left: 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: none;
   background-color: transparent;
   box-shadow: none;

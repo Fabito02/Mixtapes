@@ -1485,10 +1485,6 @@ class MainWindow(Adw.ApplicationWindow):
         theme_section.append_item(theme_item)
         menu.append_section(None, theme_section)
 
-        lib_section = Gio.Menu()
-        lib_section.append("Downloaded Songs", "win.open-downloads")
-        menu.append_section(None, lib_section)
-
         app_section = Gio.Menu()
         app_section.append("Keyboard Shortcuts", "win.shortcuts")
         app_section.append("Preferences", "win.preferences")
