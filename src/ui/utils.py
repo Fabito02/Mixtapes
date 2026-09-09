@@ -1,10 +1,10 @@
 import os
 import threading
 import time
-import urllib.request
+import weakref
 import collections
 import re
-from gi.repository import Gtk, Gdk, GObject, GLib, GdkPixbuf
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
 
 # is_online() is called from every bind path that greys out offline rows —
@@ -38,6 +38,8 @@ _PROBE_WAITERS = []
 _FORCE_OFFLINE_CACHE = {"value": False, "expires": 0.0}
 _FORCE_OFFLINE_TTL = 10.0
 
+_LIKE_CACHE = {}
+_ACTIVE_LIKE_BUTTONS = weakref.WeakSet()
 
 def _check_force_offline():
     """Return the force_offline pref, cached for ``_FORCE_OFFLINE_TTL``
@@ -1569,12 +1571,33 @@ class MarqueeLabel(Gtk.ScrolledWindow):
             delattr(self, "_last_frame_time")
 
 
+def notify_like_changed(video_id, status):
+    """Updates the cache and synchronizes all active instances of LikeButton."""
+    if not video_id:
+        return GLib.SOURCE_REMOVE
+
+    _LIKE_CACHE[video_id] = status
+    for btn in list(_ACTIVE_LIKE_BUTTONS):
+        if getattr(btn, "video_id", None) == video_id:
+            btn.status = status
+            btn.update_icon()
+
+    return GLib.SOURCE_REMOVE
+
+
 class LikeButton(Gtk.Button):
-    def __init__(self, client, video_id, initial_status="INDIFFERENT", **kwargs):
+    def __init__(self, client, video_id=None, initial_status="INDIFFERENT", **kwargs):
         super().__init__(**kwargs)
         self.client = client
         self.video_id = video_id
-        self.status = initial_status
+        _ACTIVE_LIKE_BUTTONS.add(self)
+
+        if video_id and video_id in _LIKE_CACHE:
+            self.status = _LIKE_CACHE[video_id]
+        else:
+            self.status = initial_status
+            if video_id:
+                _LIKE_CACHE[video_id] = initial_status
 
         self.add_css_class("flat")
         self.add_css_class("circular")
@@ -1589,9 +1612,7 @@ class LikeButton(Gtk.Button):
             self.add_css_class("liked-button")
             self.set_tooltip_text("Unlike")
         elif self.status == "DISLIKE":
-            self.set_icon_name(
-                "view-restore-symbolic"
-            )
+            self.set_icon_name("view-restore-symbolic")
             self.set_tooltip_text("Disliked")
         else:
             self.set_icon_name("heart-outline-thick-symbolic")
@@ -1599,31 +1620,36 @@ class LikeButton(Gtk.Button):
             self.set_tooltip_text("Like")
 
     def on_clicked(self, btn):
-        new_status = "INDIFFERENT" if self.status == "LIKE" else "LIKE"
+        if not self.video_id:
+            return
 
         old_status = self.status
-        self.status = new_status
-        self.update_icon()
+        new_status = "INDIFFERENT" if old_status == "LIKE" else "LIKE"
+
+        notify_like_changed(self.video_id, new_status)
 
         def do_rate():
             success = self.client.rate_song(self.video_id, new_status)
             if not success:
-                GLib.idle_add(self.revert, old_status)
+                GLib.idle_add(notify_like_changed, self.video_id, old_status)
             else:
                 if new_status == "INDIFFERENT":
                     from player.downloads import get_download_db
                     get_download_db().invalidate_playlist_cache("LM")
 
-        thread = threading.Thread(target=do_rate)
-        thread.daemon = True
+        thread = threading.Thread(target=do_rate, daemon=True)
         thread.start()
-
-    def revert(self, status):
-        self.status = status
-        self.update_icon()
 
     def set_data(self, video_id, status):
         self.video_id = video_id
-        self.status = status
+        if video_id:
+            if video_id in _LIKE_CACHE:
+                self.status = _LIKE_CACHE[video_id]
+            else:
+                self.status = status or "INDIFFERENT"
+                _LIKE_CACHE[video_id] = self.status
+        else:
+            self.status = status or "INDIFFERENT"
+
         self.update_icon()
         self.set_visible(bool(video_id))

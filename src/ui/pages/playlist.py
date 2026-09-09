@@ -462,6 +462,9 @@ class PlaylistPage(Adw.Bin):
         bin_widget.add_css_class("list-item-bin")
         list_item.set_child(bin_widget)
 
+        overlay = Gtk.Overlay()
+        overlay.set_hexpand(True)
+
         row = Gtk.Button()
         row.add_css_class("song-row")
         row.add_css_class("song-row-button")
@@ -469,6 +472,9 @@ class PlaylistPage(Adw.Bin):
         row.add_css_class("flat")
         row.set_hexpand(True)
         row.set_focus_on_click(False)
+
+        overlay.set_child(row)
+        overlay._lv_row = row
 
         inner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         inner_box.set_hexpand(True)
@@ -536,15 +542,17 @@ class PlaylistPage(Adw.Bin):
         dur_lbl = Gtk.Label()
         dur_lbl.add_css_class("caption")
         dur_lbl.set_valign(Gtk.Align.CENTER)
-        dur_lbl.set_margin_end(6)
+        dur_lbl.set_margin_end(44)
         dur_lbl.set_can_target(False)
         inner_box.append(dur_lbl)
         row._lv_dur_lbl = dur_lbl
 
         like_btn = LikeButton(self.client, None)
         like_btn.set_valign(Gtk.Align.CENTER)
+        like_btn.set_halign(Gtk.Align.END)
+        like_btn.set_margin_end(10)
         like_btn.set_can_target(True)
-        inner_box.append(like_btn)
+        overlay.add_overlay(like_btn)
         row._lv_like_btn = like_btn
 
         def _on_clicked_handler(btn):
@@ -566,12 +574,13 @@ class PlaylistPage(Adw.Bin):
         row._lv_video_data = None
         row._lv_full_track = None
 
-        bin_widget.set_child(row)
-        bin_widget._lv_track_ui = row
+        bin_widget.set_child(overlay)
+        bin_widget._lv_track_ui = overlay
 
     def _on_row_clicked(self, list_item):
         bin_widget = list_item.get_child()
-        btn = getattr(bin_widget, "_lv_track_ui", bin_widget)
+        track_ui = getattr(bin_widget, "_lv_track_ui", bin_widget)
+        btn = getattr(track_ui, "_lv_row", track_ui)
 
         if self._multi_select_mode:
             track = getattr(btn, "_lv_full_track", None)
@@ -616,8 +625,6 @@ class PlaylistPage(Adw.Bin):
             badge = Gtk.Label(label="E")
             badge.add_css_class("explicit-badge")
             badge.set_valign(Gtk.Align.CENTER)
-            # Insert before the trailing spacer so the badge sits next to
-            # the title, not at the right edge of the row.
             row._lv_title_box.insert_child_after(badge, row._title_label)
             row._lv_explicit_badge = badge
         return row._lv_explicit_badge
@@ -628,8 +635,6 @@ class PlaylistPage(Adw.Bin):
             icon.set_pixel_size(14)
             icon.add_css_class("dim-label")
             icon.set_valign(Gtk.Align.CENTER)
-            # Slot in after the explicit badge if it exists, otherwise
-            # right after the title. Either way, kept before the spacer.
             anchor = row._lv_explicit_badge or row._title_label
             row._lv_title_box.insert_child_after(icon, anchor)
             row._lv_dl_icon = icon
@@ -651,7 +656,8 @@ class PlaylistPage(Adw.Bin):
         list_item.set_selectable(True)
         list_item.set_activatable(True)
 
-        row = bin_widget._lv_track_ui
+        track_ui = bin_widget._lv_track_ui
+        row = getattr(track_ui, "_lv_row", track_ui)
         t = item.data
 
         video_id = t.get("videoId")
@@ -819,7 +825,8 @@ class PlaylistPage(Adw.Bin):
             bin_widget.set_child(None)
             return
 
-        row = bin_widget._lv_track_ui
+        track_ui = bin_widget._lv_track_ui
+        row = getattr(track_ui, "_lv_row", track_ui)
         if row._lv_player_handler is not None:
             try:
                 self.player.disconnect(row._lv_player_handler)
@@ -1372,16 +1379,15 @@ class PlaylistPage(Adw.Bin):
         self._update_duration_from_all_tracks()
 
     def _update_dl_icon_for(self, video_id, downloaded=False, queued=False):
-        """Update the download indicator on visible rows matching video_id."""
         child = self.songs_list.get_first_child()
         while child:
-            # ListView hierarchy: GtkListItemWidget → Adw.Bin → Gtk.Box (row)
             bin_widget = child.get_first_child()
-            row = (
+            top = (
                 bin_widget.get_child()
                 if bin_widget and hasattr(bin_widget, "get_child")
                 else None
             )
+            row = getattr(top, "_lv_row", top)
             if row and hasattr(row, "_lv_video_id") and row._lv_video_id == video_id:
                 if downloaded:
                     icon = self._ensure_dl_icon(row)
@@ -2706,14 +2712,11 @@ class PlaylistPage(Adw.Bin):
                 )
 
     def _refresh_all_row_visuals(self):
-        """Walk all visible ListView rows and update checkbox/highlight state.
-        Also toggles the right-side dur_lbl + like_btn since multi-select
-        mode hides them to make room for the checkbox on narrow viewports."""
         child = self.songs_list.get_first_child()
         while child:
-            # child is the list row, its first child is the Adw.Bin
             bin_w = child.get_first_child() if child else None
-            row = getattr(bin_w, "_lv_track_ui", None) if bin_w else None
+            top = getattr(bin_w, "_lv_track_ui", None) if bin_w else None
+            row = getattr(top, "_lv_row", top)
             if row and hasattr(row, "_lv_full_track") and row._lv_full_track:
                 vid = row._lv_full_track.get("videoId")
                 is_sel = vid in self._selected_video_ids if vid else False
@@ -3767,7 +3770,8 @@ class PlaylistPage(Adw.Bin):
         child = self.songs_list.get_first_child()
         while child:
             bin_w = child.get_first_child() if child else None
-            row = getattr(bin_w, "_lv_track_ui", None) if bin_w else None
+            top = getattr(bin_w, "_lv_track_ui", None) if bin_w else None
+            row = getattr(top, "_lv_row", top)
             if row and hasattr(row, "_lv_img") and hasattr(row._lv_img, "set_compact"):
                 row._lv_img.set_compact(compact)
             child = child.get_next_sibling()
