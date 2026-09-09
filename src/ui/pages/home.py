@@ -771,7 +771,7 @@ class HomePage(Adw.Bin):
     def _add_card_strip(self, section_box, items, bucket=None, section_title=""):
         scroll_box = HorizontalScrollBox()
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        h_box.set_margin_bottom(24)
+        h_box.set_margin_bottom(16)
         if not hasattr(self, "_card_strips"):
             self._card_strips = []
         self._card_strips.append(h_box)
@@ -819,7 +819,7 @@ class HomePage(Adw.Bin):
         title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
         title_lbl.set_wrap(True)
         title_lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        title_lbl.set_lines(2)
+        title_lbl.set_lines(1)
         title_lbl.set_justify(Gtk.Justification.LEFT)
         title_lbl.set_halign(Gtk.Align.START)
         title_clamp = Adw.Clamp()
