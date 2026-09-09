@@ -759,11 +759,97 @@ class ArtistPage(Adw.Bin):
             self.subscribe_btn.set_tooltip_text("Unsubscribe")
             self.subscribe_btn.add_css_class(
                 "liked-button"
-            )  # Consistent with LikeButton
+            )
         else:
             self.subscribe_btn.set_icon_name("non-starred-symbolic")
             self.subscribe_btn.set_tooltip_text("Subscribe")
             self.subscribe_btn.remove_css_class("liked-button")
+
+    def _make_grid_card(self, item):
+        card = Gtk.Button()
+        card.add_css_class("activatable")
+        card.add_css_class("artist-horizontal-item")
+        card.add_css_class("flat")
+        card.item_data = item
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.set_child(box)
+
+        thumbnails = item.get("thumbnails", [])
+        thumb_url = thumbnails[-1]["url"] if thumbnails else None
+
+        img = AsyncImage(url=thumb_url, size=140, player=self.player)
+        img.video_id = (
+            item.get("videoId") or item.get("playlistId") or item.get("browseId")
+        )
+
+        wrapper = Gtk.Box()
+        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
+        wrapper.add_css_class("card-cover")
+        wrapper.set_halign(Gtk.Align.CENTER)
+        wrapper.append(img)
+        box.append(wrapper)
+
+        title = item.get("title", "")
+        lbl = Gtk.Label(label=title)
+        lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        lbl.set_wrap(True)
+        lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        lbl.set_lines(2)
+        lbl.set_justify(Gtk.Justification.LEFT)
+        lbl.set_halign(Gtk.Align.START)
+        lbl.set_tooltip_text(title)
+
+        text_clamp = Adw.Clamp()
+        text_clamp.set_child(lbl)
+        box.append(text_clamp)
+
+        meta = parse_item_metadata(item)
+        parts = []
+        if meta["year"]:
+            parts.append(meta["year"])
+        if meta["type"] and meta["type"].lower() not in [p.lower() for p in parts]:
+            parts.append(meta["type"])
+
+        subtitle_text = " • ".join(parts)
+
+        subtitle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        subtitle_box.set_halign(Gtk.Align.START)
+
+        if meta["is_explicit"]:
+            explicit_lbl = Gtk.Label(label="E")
+            explicit_lbl.set_justify(Gtk.Justification.CENTER)
+            explicit_lbl.set_halign(Gtk.Align.CENTER)
+            explicit_lbl.add_css_class("explicit-badge")
+            subtitle_box.append(explicit_lbl)
+
+        if subtitle_text:
+            subtitle_lbl = Gtk.Label(label=subtitle_text)
+            subtitle_lbl.add_css_class("caption")
+            subtitle_lbl.add_css_class("dim-label")
+            subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            subtitle_box.append(subtitle_lbl)
+
+        if subtitle_text or meta["is_explicit"]:
+            subtitle_clamp = Adw.Clamp()
+            subtitle_clamp.set_child(subtitle_box)
+            box.append(subtitle_clamp)
+
+        card.connect("clicked", lambda btn: self.on_grid_child_activated(None, btn))
+
+        gesture = Gtk.GestureClick()
+        gesture.set_button(3)
+        gesture.connect("released", self.on_grid_right_click, card)
+        card.add_controller(gesture)
+
+        lp = Gtk.GestureLongPress()
+        lp.connect(
+            "pressed",
+            lambda g, x, y, c=card: self.on_grid_right_click(g, 1, x, y, c),
+        )
+        card.add_controller(lp)
+
+        return card
 
     def add_grid_section(self, title, section_dict):
         items = section_dict.get("results", [])
@@ -799,98 +885,9 @@ class ArtistPage(Adw.Bin):
         showing_items = items[:limit]
 
         for item in showing_items:
-            thumb_url = (
-                item.get("thumbnails", [])[-1]["url"]
-                if item.get("thumbnails")
-                else None
-            )
+            card = self._make_grid_card(item)
+            inner_box.append(card)
 
-            item_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            item_box.add_css_class("artist-horizontal-item")
-            item_box.item_data = item
-            item_box.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
-
-            img = AsyncImage(url=thumb_url, size=140, player=self.player)
-            img.video_id = (
-                item.get("videoId") or item.get("playlistId") or item.get("browseId")
-            )
-
-            wrapper = Gtk.Box()
-            wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-            wrapper.add_css_class("card")
-            wrapper.set_halign(Gtk.Align.CENTER)
-            wrapper.append(img)
-
-            item_box.append(wrapper)
-
-            lbl = Gtk.Label(label=item.get("title", ""))
-            lbl.set_ellipsize(Pango.EllipsizeMode.END)
-            lbl.set_wrap(True)
-            lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            lbl.set_lines(2)
-            lbl.set_justify(Gtk.Justification.LEFT)
-            lbl.set_halign(Gtk.Align.START)
-
-            text_clamp = Adw.Clamp(maximum_size=140)
-            text_clamp.set_child(lbl)
-            item_box.append(text_clamp)
-
-            # Subtitle (Year / Type / Explicit)
-            meta = parse_item_metadata(item)
-            parts = []
-            if meta["year"]:
-                parts.append(meta["year"])
-            if meta["type"] and meta["type"].lower() not in [p.lower() for p in parts]:
-                parts.append(meta["type"])
-
-            subtitle_text = " • ".join(parts)
-
-            subtitle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-            subtitle_box.set_halign(Gtk.Align.START)
-
-            if meta["is_explicit"]:
-                explicit_lbl = Gtk.Label(label="E")
-                explicit_lbl.set_justify(Gtk.Justification.CENTER)
-                explicit_lbl.set_halign(Gtk.Align.CENTER)
-                explicit_lbl.add_css_class("explicit-badge")
-                subtitle_box.append(explicit_lbl)
-
-            if subtitle_text:
-                subtitle_lbl = Gtk.Label(label=subtitle_text)
-                subtitle_lbl.add_css_class("caption")
-                subtitle_lbl.add_css_class("dim-label")
-                subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
-                subtitle_box.append(subtitle_lbl)
-
-            if subtitle_text or meta["is_explicit"]:
-                subtitle_clamp = Adw.Clamp(maximum_size=140)
-                subtitle_clamp.set_child(subtitle_box)
-                item_box.append(subtitle_clamp)
-
-            inner_box.append(item_box)
-
-            # Left Click Activation
-            click_gesture = Gtk.GestureClick()
-            click_gesture.set_button(1)
-            click_gesture.connect("pressed", self._on_grid_item_pressed, item_box)
-            click_gesture.connect("released", self._on_grid_item_clicked, item_box)
-            item_box.add_controller(click_gesture)
-
-            # Right Click Menu
-            gesture = Gtk.GestureClick()
-            gesture.set_button(3)
-            gesture.connect("released", self.on_grid_right_click, item_box)
-            item_box.add_controller(gesture)
-
-            # Long Press for touch
-            lp = Gtk.GestureLongPress()
-            lp.connect(
-                "pressed",
-                lambda g, x, y, ib=item_box: self.on_grid_right_click(g, 1, x, y, ib),
-            )
-            item_box.add_controller(lp)
-
-        # Load More Cell
         limit = self._section_limits.get(title, 10)
         has_more_online = section_dict.get("params")
         if len(items) > limit or has_more_online:
@@ -904,7 +901,6 @@ class ArtistPage(Adw.Bin):
             more_btn.add_css_class("pill")
             more_btn.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
 
-            # Click handler for Load More using the button directly
             more_btn.connect(
                 "clicked",
                 lambda btn, t=title, sd=section_dict: self.on_load_more_clicked(
@@ -1120,28 +1116,30 @@ class ArtistPage(Adw.Bin):
         self.on_load_more_clicked(None, title, section_dict, None, None)
 
     def on_grid_child_activated(self, flowbox, child):
-        item_box = child.get_child() if hasattr(child, "get_child") else child
-        if hasattr(item_box, "item_data"):
-            data = item_box.item_data
-            pid = data.get("browseId") or data.get("playlistId")
-            if "videoId" in data:
-                self.player.play_tracks([data])
-            elif pid and pid.startswith("UC"):
-                # Artist browse ID - open artist page
-                root = self.get_root()
-                if root and hasattr(root, "open_artist"):
-                    root.open_artist(pid, data.get("title"))
-            elif pid:
-                self.open_playlist_callback(
-                    pid,
-                    {
-                        "title": data.get("title"),
-                        "thumb": data.get("thumbnails", [])[-1]["url"]
-                        if data.get("thumbnails")
-                        else None,
-                        "author": self.artist_name,
-                    },
-                )
+        data = getattr(child, "item_data", None)
+        if not data and hasattr(child, "get_child"):
+            data = getattr(child.get_child(), "item_data", None)
+        if not data:
+            return
+
+        pid = data.get("browseId") or data.get("playlistId")
+        if "videoId" in data:
+            self.player.play_tracks([data])
+        elif pid and pid.startswith("UC"):
+            root = self.get_root()
+            if root and hasattr(root, "open_artist"):
+                root.open_artist(pid, data.get("title"))
+        elif pid:
+            self.open_playlist_callback(
+                pid,
+                {
+                    "title": data.get("title"),
+                    "thumb": data.get("thumbnails", [])[-1]["url"]
+                    if data.get("thumbnails")
+                    else None,
+                    "author": self.artist_name,
+                },
+            )
 
     def _build_queue_tracks(self):
         queue_tracks = []

@@ -741,8 +741,10 @@ def attach_playing_highlight(row_widget, player, video_id):
         is_playing = video_id in (player.current_video_id, source)
         if is_playing:
             target.add_css_class("playing")
+            target.remove_css_class("flat")
         else:
             target.remove_css_class("playing")
+            target.add_css_class("flat")
 
     try:
         handler = player.connect("metadata-changed", _refresh)

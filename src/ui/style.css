@@ -17,25 +17,12 @@
 
 @define-color scrim_top mix(@window_bg_color, transparent, 0.4);
 @define-color scrim_mid mix(@window_bg_color, transparent, 0.8);
-@define-color row_hover alpha(@accent_bg_color, 0.08);
+@define-color row_hover alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.15);
 @define-color row_selected alpha(@accent_bg_color, 0.12);
-/* Row tints use @accent_bg_color, the solid accent, to keep the hue.
-   @accent_color is darkened in light mode and washes them out. */
-@define-color playing_bg alpha(@accent_bg_color, 0.1);
-/* Static fallback for the playing-row label, used before MainWindow
-   overrides it in _refresh_derived_colors. Mixing toward @view_fg_color
-   darkens on light themes and lightens on dark ones, which GTK has no
-   media query for. The old `hsl(... 100% 80%)` was a dark-mode value and
-   left light themes near 1.1:1. */
-@define-color playing_fg color-mix(in oklab, @accent_color, @view_fg_color 60%);
-/* Same label over the blurred cover, where the row is translucent and
-   the cover bleeds through. Mixed further for headroom. */
-@define-color playing_fg_over_blur color-mix(in oklab, @accent_color, @view_fg_color 78%);
-/* Translucent surface for the .playing row in blurred-background mode.
-   MainWindow replaces it with a derived value. */
+@define-color playing_bg alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.3);
+@define-color playing_fg mix(in oklab, @accent_color, @view_fg_color 60%);
+@define-color playing_fg_over_blur mix(in oklab, @accent_color, @view_fg_color 78%);
 @define-color playing_surface_over_blur alpha(mix(@view_bg_color, @accent_bg_color, 0.35), 0.5);
-/* Translucent chrome panels in blurred-background mode. MainWindow
-   replaces these with derived values. */
 @define-color blur_panel_bg alpha(@window_bg_color, 0.35);
 @define-color blur_panel_bg_weak alpha(@window_bg_color, 0.25);
 
@@ -113,8 +100,6 @@
   border-radius: 12px 12px 0 0;
 }
 
-/* Reset default hover/selection for playlist view rows 
-   where we use our custom .song-row inside */
 listview.playlist-view > row,
 listview.playlist-view > row:hover,
 listview.playlist-view > row:selected,
@@ -132,10 +117,6 @@ listview.playlist-view > row:focus:selected {
    Tab navigation with no visible indicator. Draw the ring on the rounded
    inner box instead. :focus-visible keeps it keyboard-only — a mouse click
    focuses the row without flashing a ring. */
-listview.playlist-view > row:focus-visible box.song-row {
-  outline: 2px solid @accent_color;
-  outline-offset: -2px;
-}
 
 .sort-dropdown > button:not(:hover):not(:active) {
   background: none;
@@ -168,7 +149,6 @@ listview.playlist-view > row:focus-visible box.song-row {
 
 
 
-/* List View Reset */
 listview.playlist-view,
 listview.playlist-view > row,
 .list-item-bin {
@@ -178,7 +158,6 @@ listview.playlist-view > row,
   border: none;
 }
 
-/* Ensure the inner ListBoxRow also doesn't have a background */
 listview.playlist-view > row > listboxrow,
 listboxrow.song-row-wrapper {
   background: transparent;
@@ -187,17 +166,10 @@ listboxrow.song-row-wrapper {
   box-shadow: none;
 }
 
-/* Song Row Base Styling */
-box.song-row {
+box.song-row, .song-row-button {
   border-radius: 12px;
-  transition: background-color 200ms ease;
   min-height: 56px;
-  padding: 6px;
-}
-
-/* Only apply custom hover in the main playlist/search list views */
-listview.playlist-view box.song-row:hover {
-  background-color: @row_hover;
+  padding: 8px;
 }
 
 /* While a view is actively scrolling, freeze the hover-background fades.
@@ -207,15 +179,6 @@ listview.playlist-view box.song-row:hover {
    class is added/removed by suppress_hover_while_scrolling(); a still pointer
    (genuine hover) keeps the fade. Selectors are kept specific enough to win
    the cascade over the base transition rules they mirror. */
-.is-scrolling box.song-row,
-.is-scrolling .artist-horizontal-item,
-.is-scrolling .home-speed-tile,
-.is-scrolling row,
-.is-scrolling .card,
-.is-scrolling box.song-row button,
-.is-scrolling box.song-row image {
-  transition: none;
-}
 
 /* Freezing the *fade* still left an instant per-row repaint as each row's
    :hover background flipped on/off under the moving content. Blank the hover
@@ -232,19 +195,8 @@ listview.playlist-view box.song-row:hover {
   background-color: transparent;
 }
 
-/* Selected indicator (multi-select) */
-box.song-row.selected {
-  background-color: @row_selected;
-}
-
-/* Playing indicator */
-box.song-row.playing {
-  color: @playing_fg;
-  background-color: @playing_bg;
-}
-
-box.song-row.playing label {
-  color: @playing_fg;
+.playing {
+  color: @accent_color;
 }
 
 /* Boxed-list rows carry libadwaita's opaque row bg, masking the inner
@@ -291,33 +243,30 @@ popover.menu modelbutton {
   color: @popover_fg_color;
 }
 
-/* Image scaling */
-picture.song-img {
+picture.song-img, label.song-index {
   min-width: 56px;
   min-height: 56px;
   border-radius: 8px;
 }
 
-/* Compact mode */
-.compact box.song-row {
+.compact box.song-row, .compact .song-row-button {
   min-height: 44px;
   padding: 6px;
 }
 
-.compact picture.song-img {
+.compact picture.song-img, .compact label.song-index {
   min-width: 44px;
   min-height: 44px;
 }
 
 .compact box.song-row label {
-  font-size: 0.95em; /* Larger compact font */
+  font-size: 0.95em;
 }
 
 listview.playlist-view > row:disabled {
   opacity: 1;
 }
 
-/* Horizontal Grid Item Hover */
 .artist-horizontal-item {
   padding: 10px;
   border-radius: 16px;
@@ -472,9 +421,6 @@ flowboxchild:focus-visible {
   margin-bottom: 24px;
 }
 
-/* Sidebar (Nautilus-like). GTK's OverlaySplitView draws its own separator
-   between panes, so we explicitly clear the border Adwaita's default
-   `.sidebar` styling adds (which was designed for left-docked sidebars). */
 .sidebar {
   background-color: @window_bg_color;
   border-left: none;

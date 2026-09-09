@@ -124,8 +124,8 @@ window.cover-bg-active viewswitcherbar actionbar > revealer > box {
    The node is `bottom-sheet`, not `bottomsheet`. The old selectors read
    `bottomsheet` and matched nothing. */
 window.cover-bg-active bottom-sheet > sheet {
-  background-color: @window_bg_color;
-  background-image: linear-gradient(@blur_panel_bg, @blur_panel_bg);
+    background: none;
+    background-color: @window_bg_color;
 }
 
 /* Player bar, queue panel, expanded player are Gtk.Box widgets carrying
@@ -262,26 +262,17 @@ class MainWindow(Adw.ApplicationWindow):
         self._last_dominant_rgb = None
 
 
-        # Add custom icons path relative to current file or project root
 
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         assets_path = os.path.join(project_root, "assets", "icons")
 
         icon_theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
-        # Add GResource path
-        # Add GResource path
-        # The resource prefix is /com/pocoguy/muse/icons
-        # The content inside is hicolor/scalable/actions/compass2-symbolic.svg
         icon_theme.add_resource_path("/com/pocoguy/muse/icons")
 
-        # Keep file path as backup/dev
         icon_theme.add_search_path(assets_path)
 
-        # Setup Actions
         self.setup_actions()
 
-        # Key Controller (Global Type to Search)
-        # Use CAPTURE phase to ensure we see events before children (like SearchEntry) swallow them
         ctrl = Gtk.EventControllerKey()
         ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         ctrl.connect("key-pressed", self.on_window_key_pressed)
@@ -295,23 +286,17 @@ class MainWindow(Adw.ApplicationWindow):
         menu_btn = self._build_avatar_menu_button()
         primary_btn = self._build_primary_menu_button()
 
-        # Content setup: ViewStack
         self.view_stack = Adw.ViewStack()
         self.view_stack.connect("notify::visible-child-name", self.on_view_changed)
 
-        # Toolbar View (Root) - Wraps EVERYTHING
         self.root_content_view = Adw.ToolbarView()
-
-        # Global Header Setup
         self.header_bar = Adw.HeaderBar()
 
-        # Back Button
         self.back_btn = Gtk.Button(icon_name="go-previous-symbolic")
         self.back_btn.set_visible(False)  # Hidden by default
         self.back_btn.connect("clicked", self.on_back_clicked)
         self.header_bar.pack_start(self.back_btn)
 
-        # Center Widget (Switcher / Title)
         self.title_bin = Adw.Bin()
 
         self.switcher = Adw.ViewSwitcher()
@@ -320,11 +305,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.title_widget = Adw.WindowTitle(title="Mixtapes")
 
-        # Default to Desktop
         self.title_bin.set_child(self.switcher)
         self.header_bar.set_title_widget(self.title_bin)
 
-        # Upload progress button (pie chart, hidden by default)
         self._upload_progress_btn = Gtk.Button()
         self._upload_progress_btn.add_css_class("flat")
         self._upload_progress_btn.set_tooltip_text("Upload Progress")
@@ -354,7 +337,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._ul_popover.set_child(popover_box)
         self._upload_progress_btn.connect("clicked", lambda b: self._ul_popover.popup())
 
-        # Download progress button (pie chart, hidden by default)
         self._download_progress_btn = Gtk.Button()
         self._download_progress_btn.add_css_class("flat")
         self._download_progress_btn.set_tooltip_text("Download Progress")
@@ -391,15 +373,11 @@ class MainWindow(Adw.ApplicationWindow):
             "clicked", lambda b: self._dl_popover.popup()
         )
 
-        # pack_end stacks from the right, so primary_btn (packed
-        # first) ends up rightmost, avatar sits just left of it.
         self.header_bar.pack_end(primary_btn)
         self.header_bar.pack_end(menu_btn)
         self.header_bar.pack_end(self._upload_progress_btn)
         self.header_bar.pack_end(self._download_progress_btn)
 
-        # Refresh Library + Uploads. Visible only when the Library tab is
-        # active; has a small inline spinner that shows during the refresh.
         self._lib_refresh_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self._lib_refresh_box.set_visible(False)
         self._lib_refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
@@ -416,7 +394,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._lib_refresh_box.append(self._lib_refresh_spinner)
         self.header_bar.pack_end(self._lib_refresh_box)
 
-        # Search Button (Mobile/Contextual) - Toggle
         self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic")
         self.header_bar.pack_start(self.search_btn)
 
@@ -437,7 +414,6 @@ class MainWindow(Adw.ApplicationWindow):
             GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE,
         )
 
-        # Configure Search Entry
         search_clamp = Adw.Clamp()
         search_clamp.set_maximum_size(600)
 
@@ -449,36 +425,30 @@ class MainWindow(Adw.ApplicationWindow):
 
         search_clamp.set_child(self.search_entry)
         self.search_bar.set_child(search_clamp)
-        self.search_bar.connect_entry(self.search_entry)  # NOW it exists
+        self.search_bar.connect_entry(self.search_entry)
 
         self.root_content_view.add_top_bar(self.search_bar)
 
-        # Wrap content in OverlaySplitView for Sidebar (Nautilus-style)
         self.split_view = Adw.OverlaySplitView()
         self.split_view.set_sidebar_position(self._read_sidebar_position())
         self.split_view.set_min_sidebar_width(250)
         self.split_view.set_max_sidebar_width(450)
 
-        # Main Stack for switching between Browser and Player on desktop
         self.main_stack = Gtk.Stack()
         self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         self.main_stack.set_transition_duration(300)
 
-        # Main Content Area (Scrolled Browser)
         self.content_bin = ScrolledWindow()
         self.content_bin.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
         self.content_bin.set_child(self.view_stack)
 
         self.main_stack.add_named(self.content_bin, "browser")
 
-        # Queue Sidebar (Right Side)
         from ui.queue_panel import QueuePanel
 
-        # Global Player (Init before queue panel)
 
         self.player = Player()
 
-        # Connect download manager progress to UI
         self.player.download_manager.connect("progress", self._on_download_progress)
         self.player.download_manager.connect("complete", self._on_download_complete)
         self.player.download_manager.connect("item-done", self._on_download_item_done)
@@ -488,37 +458,30 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.queue_panel = QueuePanel(self.player)
 
-        # Sidebar Content
         self.queue_panel.add_css_class("sidebar")
         self.split_view.set_sidebar(self.queue_panel)
 
-        # Set main_stack as content of root_content_view (ToolbarView)
         self.root_content_view.set_content(self.main_stack)
         self.split_view.set_content(self.root_content_view)
 
         self._sidebar_explicitly_opened = False
-        self.split_view.set_show_sidebar(False)  # Hidden by default
+        self.split_view.set_show_sidebar(False)
         self.split_view.set_enable_show_gesture(False)
         self.split_view.set_enable_hide_gesture(False)
 
-        # Signal for Sidebar visibility sync
         self.split_view.connect(
             "notify::show-sidebar", self._on_sidebar_visibility_changed
         )
         self.split_view.connect("notify::collapsed", self._on_split_view_collapsed)
         self._apply_window_controls_position()
 
-        # 5. Initialize BottomSheet
         self.bottom_sheet = Adw.BottomSheet()
         self.bottom_sheet.set_show_drag_handle(True)
-        self.bottom_sheet.set_open(False)  # Ensure it's closed by default
+        self.bottom_sheet.set_open(False)
         self.bottom_sheet.set_content(self.split_view)
-        # Mobile-only swipe? No, expanded player handles it.
 
-        # Global Player Bar (Always Visible)
         from ui.player_bar import PlayerBar
 
-        # Player already inited above
         self.player_bar = PlayerBar(
             self.player,
             on_artist_click=self.on_player_bar_artist_click,
@@ -527,7 +490,6 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.player_bar.connect("expand-requested", self.on_expand_requested)
 
-        # Wrap in Revealer for autohide when queue is empty
         self.player_bar_revealer = Gtk.Revealer()
         self.player_bar_revealer.set_transition_type(
             Gtk.RevealerTransitionType.SLIDE_UP
@@ -538,19 +500,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.player_bar_revealer.set_child(self.player_bar)
         self.root_content_view.add_bottom_bar(self.player_bar_revealer)
 
-        # Connect signals to auto-show/hide player bar
         self.player.connect("state-changed", self._on_player_bar_visibility)
         self.player.connect("metadata-changed", self._on_player_bar_visibility)
         self.player.connect("track-error", self._on_track_error)
 
-        # View Switcher Bar (Mobile) - Stacked above Player Bar?
         self.view_switcher_bar = Adw.ViewSwitcherBar()
         self.view_switcher_bar.set_stack(self.view_stack)
         self.view_switcher_bar.set_reveal(False)
         self.view_switcher_bar.set_visible(False)
         self.root_content_view.add_bottom_bar(self.view_switcher_bar)
 
-        # Tab Re-click Gesture Setup
         self.switcher_click = Gtk.GestureClick()
         self.switcher_click.connect("pressed", self.on_switcher_reclick)
         self.switcher.add_controller(self.switcher_click)
@@ -562,7 +521,6 @@ class MainWindow(Adw.ApplicationWindow):
         from ui.expanded_player import ExpandedPlayer
         from ui.desktop_cover_view import DesktopCoverView
 
-        # Initialize your ExpandedPlayer (now as a standalone Box/Widget)
         self.expanded_player = ExpandedPlayer(
             self.player,
             on_artist_click=self.on_player_bar_artist_click,
@@ -570,7 +528,6 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.expanded_player.add_css_class("player-drawer")
         self.expanded_player.set_vexpand(True)
-        # Connect the dismiss signal to close the sheet
         self.expanded_player.connect("dismiss", self._on_player_dismissed)
 
         # Desktop equivalent: just the cover art as a separate
@@ -581,8 +538,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.main_stack.add_named(self.desktop_cover_view, "cover")
 
         # Do NOT set sheet or add to stack yet, managed by breakpoint or expand request
-
-        # Register with OverlaySplitView or ToastOverlay
         self.toast_overlay = Adw.ToastOverlay()
         self.toast_overlay.set_child(self.bottom_sheet)
         self.set_content(self.toast_overlay)
@@ -636,10 +591,8 @@ class MainWindow(Adw.ApplicationWindow):
             self._style_manager = None
         self._apply_appearance_prefs_initial()
 
-        # Initialize Pages (Must be before breakpoint)
         self.init_pages()
 
-        # 6. Responsive Breakpoints
 
         # COLLAPSE SIDERBAR (< 750px)
         collapse_breakpoint = Adw.Breakpoint.new(
@@ -658,7 +611,6 @@ class MainWindow(Adw.ApplicationWindow):
         mobile_breakpoint.connect("unapply", self._on_mobile_breakpoint_unapply)
         self.add_breakpoint(mobile_breakpoint)
 
-        # 7. Initial Checks
         self.check_auth()
 
         # Monitor network connectivity.
@@ -681,8 +633,6 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(5, self._network_poll_tick)
 
     def _on_network_changed(self, monitor, available):
-        # Coalesce the burst: act on the state that's still there 1.5 s
-        # after the last emission.
         if self._net_debounce_id:
             GLib.source_remove(self._net_debounce_id)
         self._net_debounce_id = GLib.timeout_add(1500, self._settle_network_change)
@@ -733,7 +683,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self.search_page.load_explore_data(force=True)
             if hasattr(self, "home_page"):
                 self.home_page.refresh()
-            # Re-validate auth if needed
             from api.client import MusicClient
 
             client = MusicClient()
@@ -786,8 +735,7 @@ class MainWindow(Adw.ApplicationWindow):
             "tinted_background": bool(prefs.get("tinted_background", False)),
         }
 
-    def _on_metadata_for_appearance(self, player, title, artist,
-                                    thumb_url, video_id, like_status):
+    def _on_metadata_for_appearance(self, player, title, artist, thumb_url, video_id, like_status):
         # If the queue is empty or there's no cover (stopped, cleared),
         # tear cover-bg down completely so the app falls back to the
         # normal theme bg / accent.
@@ -797,11 +745,16 @@ class MainWindow(Adw.ApplicationWindow):
             self._deactivate_cover_bg()
             self._clear_dynamic_accent()
             return
+        same_cover = (thumb_url == self._last_cover_url)
         self._last_cover_url = thumb_url
+        
         prefs = self._read_appearance_prefs()
-        if prefs["blurred_background"]:
+        if prefs["blurred_background"] and not same_cover:
             self._activate_cover_bg(thumb_url)
-        if prefs["dynamic_accent"]:
+        elif prefs["blurred_background"]:
+            self.add_css_class("cover-bg-active")
+
+        if prefs["dynamic_accent"] and not same_cover:
             self._update_dynamic_accent(thumb_url)
 
     def _activate_cover_bg(self, thumb_url):
@@ -884,35 +837,11 @@ class MainWindow(Adw.ApplicationWindow):
         get_blurred_cover(thumb_url, dark=self._is_dark(), callback=_apply)
 
     def _set_blurred_background_css(self, path):
-        """Compose the dynamic CSS for blurred-bg mode:
-          1. The override stylesheet (_BLUR_OVERRIDE_CSS) that makes the
-             chrome translucent. We bundle it into the same provider as
-             the bg image so it loads at PRIORITY_USER + 1, high enough
-             to override the user's ~/.config/gtk-4.0/gtk.css.
-          2. The window's background-image rule pointing at the cached
-             blurred PNG, and the same image on the mobile sheet.
-
-        The sheet gets its own copy rather than going transparent. It
-        covers the page underneath, so clearing it shows the playlist
-        through the player. Its own crop of the blur keeps it opaque and
-        still shows the cover. The panel wash rides on top as a second
-        background layer, so the sheet keeps the tint the contrast
-        numbers were derived against.
-        """
-        # pathlib handles Windows drive letters + backslashes correctly
-        # (file:///C:/...); urllib.quote would percent-escape the colon
-        # and slashes and produce an unparseable URI for GTK's CSS loader.
         from pathlib import Path
         url = Path(path).as_uri()
         bg_rule = (
             "window.cover-bg-active {\n"
             f'    background-image: url("{url}");\n'
-            "    background-size: cover;\n"
-            "    background-position: center;\n"
-            "}\n"
-            "window.cover-bg-active bottom-sheet > sheet {\n"
-            "    background-image: linear-gradient(@blur_panel_bg, @blur_panel_bg),\n"
-            f'                      url("{url}");\n'
             "    background-size: cover;\n"
             "    background-position: center;\n"
             "}\n"
@@ -930,8 +859,6 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception:
             pass
         if had_backdrop:
-            # The tokens from that backdrop describe nothing on screen
-            # now.
             self._refresh_derived_colors()
 
     def _update_dynamic_accent(self, thumb_url):
@@ -939,8 +866,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         def _apply(rgb):
             if not rgb:
-                # Featureless cover. Fall back to the theme accent
-                # rather than keeping the previous track's color.
                 self._clear_dynamic_accent()
                 return False
             self._set_dynamic_accent(rgb)
@@ -1114,8 +1039,6 @@ class MainWindow(Adw.ApplicationWindow):
         label lands on instead.
         """
         solid, standalone, view_bg = self._accent_in_force()
-        # Boxed lists tint the .playing row hardest, at 0.18. The
-        # lighter 0.10 tint follows.
         row_bg = color_utils.mix(view_bg, solid, 0.18)
         target = self._contrast_target()
         fg = color_utils.ensure_contrast(standalone, row_bg, target)
@@ -1132,13 +1055,6 @@ class MainWindow(Adw.ApplicationWindow):
             color_utils.gray(typical),
             color_utils.oklch_to_rgb(lightness, chroma * BLUR_ROW_TINT, hue),
             BLUR_ROW_OPACITY, BLUR_ROW_SEPARATION,
-        )
-        # Worst case: the band end moving the row toward the label's
-        # own lightness.
-        over_blur = color_utils.ensure_contrast(
-            standalone,
-            color_utils.mix(color_utils.gray(worst), overlay, BLUR_ROW_OPACITY),
-            target + BLUR_LABEL_HEADROOM,
         )
         panel = color_utils.overlay_for_contrast(
             color_utils.gray(typical),
@@ -1213,7 +1129,6 @@ class MainWindow(Adw.ApplicationWindow):
         def check_reclick():
             new_name = self.view_stack.get_visible_child_name()
             if old_name == new_name:
-                # Same tab clicked! Reset it to root.
                 nav = self._get_active_nav_view()
                 if nav:
                     nav.pop_to_tag("root")
@@ -1239,8 +1154,6 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             was_cover = self.main_stack.get_visible_child_name() == "cover"
             if was_cover:
-                # SLIDE_DOWN is the inverse of SLIDE_UP — browser comes
-                # back in from the top, cover exits downward.
                 self.main_stack.set_transition_type(
                     Gtk.StackTransitionType.SLIDE_DOWN
                 )
@@ -1258,22 +1171,14 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_view_changed(self, stack, param):
         visible_name = self.view_stack.get_visible_child_name()
-
-        # Any top-level navigation (Home/Library/Explore) should
-        # collapse the cover view — it's a full-window takeover and
-        # staying on it through a tab switch makes no sense.
         self._dismiss_cover_if_open()
 
-        # Update Back Button for the new active tab
         self.update_back_button_visibility()
 
-        # Auto-refresh library if selected
         if visible_name == "library" and hasattr(self, "library_page"):
             # Delay slightly to allow UI transition and background state settlement
             GLib.timeout_add(100, self.library_page.load_library)
-
-        # Refresh button visibility — recomputed also on navigation-stack
-        # changes inside each tab (see update_back_button_visibility).
+            
         self._update_refresh_button_visibility()
 
         # Close Search Bar when switching tabs
@@ -1297,15 +1202,12 @@ class MainWindow(Adw.ApplicationWindow):
             nav = self.view_stack.get_child_by_name("library")
             if isinstance(nav, Adw.NavigationView):
                 page = nav.get_visible_page()
-                # Library root page has no previous → we're on the list view.
                 if page and not nav.get_previous_page(page):
                     return self.library_page.trigger_refresh
-                # A sub-page is showing — check if it's a refreshable playlist.
                 child = page.get_child() if page else None
                 if isinstance(child, Adw.ToolbarView):
                     child = child.get_content()
                 return self._playlist_page_refresh(child)
-        # Playlist pages can live under Home/Explore too.
         nav = self._get_active_nav_view()
         if nav:
             page = nav.get_visible_page()
@@ -1326,7 +1228,6 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception:
             return None
 
-        # HistoryPage owns its own load/refresh path.
         if isinstance(child, HistoryPage):
             def _do_history():
                 child.load()
@@ -1470,7 +1371,6 @@ class MainWindow(Adw.ApplicationWindow):
         # ── Menu model ───────────────────────────────────────────────
         menu = Gio.Menu()
 
-        # 1. Profile header — a custom child slot ("profile-header").
         header_section = Gio.Menu()
         header_item = Gio.MenuItem.new(None, None)
         header_item.set_attribute_value(
@@ -1479,7 +1379,6 @@ class MainWindow(Adw.ApplicationWindow):
         header_section.append_item(header_item)
         menu.append_section(None, header_section)
 
-        # 2. Signed-in-only account actions.
         authed_section = Gio.Menu()
         for label, action in (
             ("Your Channel",       "win.open-channel"),
@@ -1493,8 +1392,6 @@ class MainWindow(Adw.ApplicationWindow):
             authed_section.append_item(item)
         menu.append_section(None, authed_section)
 
-        # 3. Sign in / Log out — one is enabled at a time, the other
-        # hidden via `hidden-when="action-disabled"`.
         auth_section = Gio.Menu()
         signin_item = Gio.MenuItem.new("Sign In", "win.sign-in")
         signin_item.set_attribute_value(
@@ -1568,7 +1465,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         menu = Gio.Menu()
 
-        # 1. Theme swatches — custom child.
         theme_section = Gio.Menu()
         theme_item = Gio.MenuItem.new(None, None)
         theme_item.set_attribute_value(
@@ -1577,13 +1473,10 @@ class MainWindow(Adw.ApplicationWindow):
         theme_section.append_item(theme_item)
         menu.append_section(None, theme_section)
 
-        # 2. Downloaded songs — works offline, not account-scoped, so
-        # this lives in the app menu rather than the profile one.
         lib_section = Gio.Menu()
         lib_section.append("Downloaded Songs", "win.open-downloads")
         menu.append_section(None, lib_section)
 
-        # 3. App entries.
         app_section = Gio.Menu()
         app_section.append("Keyboard Shortcuts", "win.shortcuts")
         app_section.append("Preferences", "win.preferences")
@@ -1918,7 +1811,6 @@ class MainWindow(Adw.ApplicationWindow):
         cr.arc(cx, cy, radius, 0, 2 * math.pi)
         cr.fill()
 
-        # Progress pie
         if color[0]:
             cr.set_source_rgba(color[1].red, color[1].green, color[1].blue, 1.0)
         else:
@@ -1990,7 +1882,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._download_progress_fraction = done / max(total, 1)
         self._dl_pie_area.queue_draw()
 
-        # Mark the current item as downloading
         child = self._download_queue_box.get_first_child()
         while child:
             status = getattr(child, "_status_label", None)
@@ -2015,7 +1906,6 @@ class MainWindow(Adw.ApplicationWindow):
                     bar.set_fraction(fraction)
                 if status:
                     status.set_label(f"{int(fraction * 100)}%")
-                # yt_dlp has already started writing bytes — too late to cancel.
                 cancel_btn = getattr(child, "_cancel_btn", None)
                 if cancel_btn:
                     cancel_btn.set_visible(False)
@@ -2638,9 +2528,7 @@ class MainWindow(Adw.ApplicationWindow):
         accent_row.set_subtitle(
             "Match the app accent color to the current track's cover"
         )
-        # Liga o switch
         accent_row.set_enable_expansion(is_dynamic_active)
-        # Abre a lista de opções filhas se estiver ativo
         accent_row.set_expanded(is_dynamic_active)
 
         tinted_row = Adw.SwitchRow()
@@ -2652,7 +2540,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         def on_accent_toggled(row, pspec):
             on = row.get_enable_expansion()
-            # Garante que expande ao ligar e recolhe ao desligar
             row.set_expanded(on)
 
             _prefs["dynamic_accent"] = on
@@ -2745,7 +2632,6 @@ class MainWindow(Adw.ApplicationWindow):
         bars_scale.connect("value-changed", on_bars_changed)
         viz_group.add(bars_row)
 
-        # Smoothing (peak-spread between bars)
         smooth_row = Adw.ActionRow()
         smooth_row.set_title("Smoothing")
         smooth_row.set_subtitle(
@@ -2780,12 +2666,10 @@ class MainWindow(Adw.ApplicationWindow):
         smooth_scale.connect("value-changed", on_smooth_changed)
         viz_group.add(smooth_row)
 
-        # Reflect the current enable state on first open.
         _viz_initial = bool(_prefs.get("visualizer_enabled", True))
         bars_row.set_sensitive(_viz_initial)
         smooth_row.set_sensitive(_viz_initial)
 
-        # Discord RPC group
         from player.discord_rpc import (
             STATUS_DISPLAY_TYPES,
             STATUS_DISPLAY_DEFAULT,
@@ -2797,7 +2681,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         rpc_adapter = getattr(self.player, "discord_rpc", None)
 
-        # Connection status
         status_text = rpc_adapter.status if rpc_adapter else "Unavailable"
         status_row = Adw.ActionRow()
         status_row.set_title("Connection Status")
@@ -2807,7 +2690,6 @@ class MainWindow(Adw.ApplicationWindow):
         status_row.add_suffix(status_label)
         rpc_group.add(status_row)
 
-        # Enable/disable toggle
         rpc_enabled_row = Adw.SwitchRow()
         rpc_enabled_row.set_title("Enable Discord RPC")
         rpc_enabled_row.set_subtitle(
@@ -2815,7 +2697,6 @@ class MainWindow(Adw.ApplicationWindow):
         )
         rpc_enabled_row.set_active(_prefs.get("discord_rpc_enabled", True))
 
-        # Status display type
         display_row = Adw.ComboRow()
         display_row.set_title("Status Display")
         display_row.set_subtitle("What appears in the status line under your name")
@@ -2875,7 +2756,6 @@ class MainWindow(Adw.ApplicationWindow):
         hide_pause_row.connect("notify::active", on_hide_pause_toggled)
         rpc_group.add(hide_pause_row)
 
-        # Small icon toggle
         small_icon_row = Adw.SwitchRow()
         small_icon_row.set_title("Show Play/Pause Icon")
         small_icon_row.set_subtitle(
@@ -2897,10 +2777,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         page.add(self._build_scrobbler_group(prefs))
 
-        # Account group was moved to the top of this page; see the
-        # _build_account_group call right after `page.add(page)`.
-
-        # Downloads group
         dl_group = Adw.PreferencesGroup()
         dl_group.set_title("Downloads")
         page.add(dl_group)
@@ -3123,9 +2999,6 @@ class MainWindow(Adw.ApplicationWindow):
         # ── Matching ──────────────────────────────────────────────────
         match_group = Adw.PreferencesGroup()
         match_group.set_title("Matching")
-        # The explanations live on the group rather than as row subtitles:
-        # a wrapped subtitle claims the row's whole natural width and
-        # squeezes the combo's value down to an ellipsis.
         match_group.set_description(
             "Quality-aware keeps looking for synced lyrics before settling "
             "for plain text. Strict takes the first hit of any kind."
@@ -3287,7 +3160,6 @@ class MainWindow(Adw.ApplicationWindow):
             self._apply_lyrics_display_prefs()
 
         grown_scale.connect("value-changed", on_grown_size)
-        # Growing only happens at Subtle and above.
         grown_row.set_sensitive(lyrics_prefs.effects_level() != "off")
         size_group.add(grown_row)
 
@@ -3332,11 +3204,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         row = Adw.ActionRow()
 
-        # Avatar prefix
         avatar = Adw.Avatar.new(40, "", False)
         row.add_prefix(avatar)
 
-        # Suffix button — Sign Out (destructive) or Sign In (suggested).
         btn = Gtk.Button(label="Sign Out" if is_authed else "Sign In")
         btn.set_valign(Gtk.Align.CENTER)
         if is_authed:
@@ -3545,8 +3415,6 @@ class MainWindow(Adw.ApplicationWindow):
                     button.remove_css_class("suggested-action")
                     button.add_css_class("destructive-action")
                 else:
-                    # A revoked credential disconnects the service from the
-                    # worker thread, so say why rather than just "not connected".
                     error = adapter.last_error or ""
                     label = SERVICE_LABELS[service]
                     row.set_subtitle(
@@ -3572,16 +3440,10 @@ class MainWindow(Adw.ApplicationWindow):
                     print(f"[SCROBBLE] could not open {uri}: {e}")
                     _toast("Could not open your browser")
 
-            # Held on the window: the launcher has to outlive this call for
-            # the async portal request to complete.
             self._scrobbler_uri_launcher = Gtk.UriLauncher(uri=uri)
             self._scrobbler_uri_launcher.launch(self, None, _done)
 
-        # Last.fm's desktop flow: ask for a token, let the user approve it in
-        # a browser, then poll until Last.fm hands back a session key.
         def _lastfm_connect():
-            # The token request is a round trip. Lock the button so a second
-            # click cannot start a competing authorization.
             buttons["lastfm"].set_sensitive(False)
 
             def _work():
@@ -3629,8 +3491,6 @@ class MainWindow(Adw.ApplicationWindow):
                     adapter.close_thread_session()
 
             def _poll_until_authorized():
-                # Last.fm keeps the token valid for an hour. Allow enough
-                # room to log in and clear 2FA before giving up.
                 deadline = time.time() + 300
                 while not state["done"] and time.time() < deadline:
                     time.sleep(2.0)
@@ -3639,8 +3499,6 @@ class MainWindow(Adw.ApplicationWindow):
                     try:
                         name = adapter.lastfm_finish_auth(token)
                     except Exception:
-                        # Last.fm reports an unauthorized token until the
-                        # user presses Allow, so keep waiting.
                         continue
                     state["done"] = True
                     GLib.idle_add(dialog.close)
@@ -3738,13 +3596,9 @@ class MainWindow(Adw.ApplicationWindow):
         if client.logout():
             if prefs_window is not None:
                 prefs_window.close()
-            # Clear library UI immediately
             if hasattr(self, "library_page"):
                 self.library_page.clear()
-            # Reset the avatar button back to "Not signed in" so it
-            # doesn't keep showing the previous user's photo/name.
             self._reset_avatar_profile()
-            # Trigger auth check to show login dialog
             self.check_auth()
 
     def _reset_avatar_profile(self):
@@ -3796,21 +3650,12 @@ class MainWindow(Adw.ApplicationWindow):
             Adw.NavigationView.push = patch_push
             Adw.NavigationView._push_patched = True
 
-        # PlaylistPage imported at top level now
-
-        # Create Pages
-        # Refactored to Single Global Header architecture
-        # Each tab is just a NavigationView wrapping the content
-
         def create_tab_nav(page_content, title, icon, name):
-            # Nav Page & View
-            # We wrap content in NavigationPage because NavigationView requires it
             nav_page = Adw.NavigationPage(child=page_content, title=title)
-            nav_page.set_tag("root")  # Tag for resetting
+            nav_page.set_tag("root")
             nav_view = Adw.NavigationView()
             nav_view.add(nav_page)
 
-            # Connect to page changes to update Back Button
             nav_view.connect("notify::visible-page", self.update_back_button_visibility)
 
             def on_push(nav_view):
@@ -3827,8 +3672,6 @@ class MainWindow(Adw.ApplicationWindow):
                 stack = list(nav_view.get_navigation_stack())
                 current_page = nav_view.get_visible_page()
 
-                # just removing the first matching page should be enough 
-                # because there shouldnt be more than one that exists in the current stack
                 for i, p in enumerate(stack[:max(len(stack)-1, 0)]):
                     if tag_match(p, current_page) or title_match(p, current_page):
                         nav_view.replace(stack[:i] + stack[i+1:])
@@ -3842,15 +3685,13 @@ class MainWindow(Adw.ApplicationWindow):
         from ui.pages.library import LibraryPage
         from ui.pages.search import SearchPage
 
-        # Instantiate Pages
         self.home_page = HomePage(self.player)
         self.library_page = LibraryPage(self.player, self.open_playlist)
         search_page = SearchPage(self.player, self.open_playlist)
-        self.search_page = search_page  # Store for global key controller
+        self.search_page = search_page 
 
-        self.tab_header_widgets = []  # Init list
+        self.tab_header_widgets = []
 
-        # Add to Stack and Configure Pages
         page_home = self.view_stack.add_named(
             create_tab_nav(self.home_page, "Home", "user-home-symbolic", "home"), "home"
         )
@@ -3881,7 +3722,6 @@ class MainWindow(Adw.ApplicationWindow):
         pass
 
     def _get_page_content(self, tab_name):
-        # Helper to traverse: NavView -> NavPage -> ToolbarView -> Content
         nav_view = self.view_stack.get_child_by_name(tab_name)
         if isinstance(nav_view, Adw.NavigationView):
             # We assume the root page of the nav view is our tab page
@@ -3890,12 +3730,9 @@ class MainWindow(Adw.ApplicationWindow):
         return None
 
     def on_window_key_pressed(self, controller, keyval, keycode, state):
-        # Handle Escape key for Back / Close Search
         if keyval == Gdk.KEY_Escape:
             if self.search_bar.get_search_mode():
-                # Manually close it and stop propagation
                 self.search_bar.set_search_mode(False)
-                # Clear focus from entry to ensure next keys are handled by the window
                 self.grab_focus()
                 return True
 
@@ -3904,8 +3741,6 @@ class MainWindow(Adw.ApplicationWindow):
                 return True
             return False
 
-        # Redirection logic for Global Search (Alphanumeric characters)
-        # 1. Ignore if focus is in an entry
         focus = self.get_focus()
         if isinstance(focus, (Gtk.Entry, Gtk.SearchEntry, Gtk.TextView, Gtk.Editable)):
             return False
@@ -3914,7 +3749,6 @@ class MainWindow(Adw.ApplicationWindow):
             self.player_bar.on_play_clicked(None)
             return True
 
-        # 2. DECIDE if it's a searchable character
         uni = Gdk.keyval_to_unicode(keyval)
         if uni == 0:
             return False
@@ -3922,7 +3756,6 @@ class MainWindow(Adw.ApplicationWindow):
         if not char.isprintable():
             return False
 
-        # 3. Ignore control/alt/meta keys
         mask = state & (
             Gdk.ModifierType.CONTROL_MASK
             | Gdk.ModifierType.ALT_MASK
@@ -3931,13 +3764,10 @@ class MainWindow(Adw.ApplicationWindow):
         if mask:
             return False
 
-        # 4. Context-Aware Redirection: If NOT in a filterable playlist, switch tab first
         if not self._get_active_filterable_child():
             if self.view_stack.get_visible_child_name() != "search":
-                # Ensure we switch tab before SearchBar captures the character
                 self.view_stack.set_visible_child_name("search")
 
-            # Ensure search tab is at root (results view)
             nav = self.view_stack.get_child_by_name("search")
             if isinstance(nav, Adw.NavigationView):
                 root_page = nav.get_visible_page()
@@ -3953,7 +3783,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._replacing_search_text = True
         self.search_entry.set_text(char)
         self._replacing_search_text = False
-        self.search_entry.set_position(-1)  # Move cursor to end
+        self.search_entry.set_position(-1)
         return True
 
     def on_global_search_changed(self, entry):
@@ -3961,12 +3791,10 @@ class MainWindow(Adw.ApplicationWindow):
         if not text and getattr(self, "_replacing_search_text", False):
             return
 
-        # Context-Aware Search Logic (Double check redirection here too)
         filterable_child = self._get_active_filterable_child()
         if filterable_child:
             filterable_child.filter_content(text)
         else:
-            # Global Search Redirection (Safety fallback)
             if self.view_stack.get_visible_child_name() != "search":
                 GLib.idle_add(self.view_stack.set_visible_child_name, "search")
 
@@ -3981,7 +3809,6 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_search_stop(self, entry):
         self.search_bar.set_search_mode(False)
-        # Crucial: Clear focus so the next Esc goes to the Window Controller
         self.grab_focus()
 
         filterable_child = self._get_active_filterable_child()
@@ -3992,115 +3819,73 @@ class MainWindow(Adw.ApplicationWindow):
         mode = search_bar.get_search_mode()
 
         if mode:
-            # Enabling search
             self.search_entry.grab_focus()
 
-            # If we are NOT in a playlist, switch to Explore tab
             filterable = self._get_active_filterable_child()
             if not filterable:
                 if self.view_stack.get_visible_child_name() != "search":
-                    # Use idle_add to avoid issues with current signal processing
                     GLib.idle_add(self.view_stack.set_visible_child_name, "search")
 
-                # Reset search view to root
                 nav = self.view_stack.get_child_by_name("search")
                 if isinstance(nav, Adw.NavigationView):
                     root_page = nav.get_visible_page()
                     if root_page and nav.get_previous_page(root_page):
                         nav.pop_to_tag("root")
 
-    # on_search_btn_clicked removed (replaced by binding)
 
     def open_playlist(self, playlist_id, initial_data=None):
-        # Collapse the cover view so the pushed page is visible.
         self._dismiss_cover_if_open()
-        # Close search bar when navigating to a detail page
         if self.search_bar.get_search_mode():
             self.search_bar.set_search_mode(False)
 
-        # Find active navigation view
         active_nav = self.view_stack.get_visible_child()
         if not isinstance(active_nav, Adw.NavigationView):
             print("Error: Active view is not a NavigationView")
             return
 
-        # Create fresh playlist page (to ensure clean state and avoid parent issues)
-        # We need to pass self.network_client? No, PlaylistPage creates its own.
-        # We need self.player.
-        # We need self.player.
         from ui.pages.playlist import PlaylistPage
 
         playlist_page = PlaylistPage(self.player)
-        # Set playlist_id BEFORE push so the header-bar refresh button's
-        # visibility check (fires on notify::visible-page) sees a real id
-        # instead of None. Without this, the button stays hidden until the
-        # next navigation event.
         playlist_page.playlist_id = playlist_id
-
-        # Wrap in NavigationPage
-        # PlaylistPage already has a ToolbarView/Header internally.
-        # Adw.NavigationView expects Adw.NavigationPage.
-        # Adw.NavigationPage expects a child widget.
         nav_page = Adw.NavigationPage(child=playlist_page, title=f"Playlist_{playlist_id}")
 
-        # Load data
         def _on_shown(page):
             playlist_page.load_playlist(playlist_id, initial_data)
 
         nav_page.connect("shown", _on_shown)
 
-        # Push to stack
         active_nav.push(nav_page)
 
-        # Connect title change signal
         playlist_page.connect(
             "header-title-changed", self.on_playlist_header_title_changed
         )
 
-        # Check if we are in mobile mode (compact) - Force true if width < 500
-        # self.view_switcher_bar.get_reveal() might be delayed?
         width = self.get_width()
         if width < 500:
             playlist_page.set_compact_mode(True)
         elif hasattr(self, "view_switcher_bar") and self.view_switcher_bar.get_reveal():
             playlist_page.set_compact_mode(True)
 
-        # Connect tab re-click logic if not already done?
-        # (This is handled globally in init_pages now)
-
-        # Note: We don't need to manually update window title or back button.
-        # Adw.NavigationView handles the transition.
-        # PlaylistPage's internal header will show a back button IF it's an Adw.HeaderBar
-        # AND we are using Adw.NavigationView.
-        # BUT: PlaylistPage has `self.header_bar = Adw.HeaderBar()`.
-        # When inside NavigationView, this header should automatically get a back button.
         pass
 
     def on_playlist_back(self):
-        # Called when playlist internal back is triggered (if any)
-        # We rely on NavView pop.
         pass
 
     def open_artist(self, channel_id, initial_name=None):
-        # Collapse the cover view so the pushed page is visible.
         self._dismiss_cover_if_open()
-        # Uploaded artists can't be opened as regular artists
         if channel_id and channel_id.startswith("FEmusic_library_privately_owned"):
             self._open_upload_artist(channel_id, initial_name or "Artist")
             return
 
-        # Close search bar when navigating to a detail page
         if self.search_bar.get_search_mode():
             self.search_bar.set_search_mode(False)
 
-        # Find active navigation view
         active_nav = self.view_stack.get_visible_child()
         if not isinstance(active_nav, Adw.NavigationView):
             print("Error: Active view is not a NavigationView")
             return
         from ui.pages.artist import ArtistPage
 
-        # Create fresh artist page
         artist_page = ArtistPage(self.player, self.open_playlist)
 
         nav_page = Adw.NavigationPage(
@@ -4111,10 +3896,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         artist_page.load_artist(channel_id, initial_name)
 
-        # Connect title change
         artist_page.connect(
             "header-title-changed", self.on_playlist_header_title_changed
-        )  # Reuse same handler
+        )
 
     def open_discography(
         self, channel_id, title, browse_id=None, params=None, initial_items=None
@@ -4202,7 +3986,6 @@ class MainWindow(Adw.ApplicationWindow):
         cat_page.load_category(params, title)
 
     def on_player_bar_artist_click(self):
-        # Try to get artist ID from the current queue track's data first
         idx = self.player.current_queue_index
         if 0 <= idx < len(self.player.queue):
             track = self.player.queue[idx]
@@ -4219,7 +4002,6 @@ class MainWindow(Adw.ApplicationWindow):
                         self.open_artist(aid, name)
                     return
 
-        # Fallback: resolve via get_song API (won't work for uploaded songs)
         vid = self.player.current_video_id
         if vid:
             threading.Thread(
@@ -4229,7 +4011,6 @@ class MainWindow(Adw.ApplicationWindow):
     def _open_upload_artist(self, browse_id, name):
         """Open an uploaded artist as a pseudo-playlist."""
         if hasattr(self, "uploads_page"):
-            # Use the UploadsPage's artist handler
             self.uploads_page._on_artist_activated(
                 None,
                 type(
@@ -4270,7 +4051,6 @@ class MainWindow(Adw.ApplicationWindow):
         if not vid:
             return
 
-        # First check if the current track object in queue has the album ID natively
         track = None
         if 0 <= self.player.current_queue_index < len(self.player.queue):
             track = self.player.queue[self.player.current_queue_index]
@@ -4287,7 +4067,6 @@ class MainWindow(Adw.ApplicationWindow):
                 album_name = album
 
         if not album_id:
-            # Fall back to fetching watch playlist to see if it belongs to an album
             from api.client import MusicClient
 
             client = MusicClient()
@@ -4306,26 +4085,19 @@ class MainWindow(Adw.ApplicationWindow):
                     print(f"Failed to resolve album: {e}")
 
         if album_id:
-            # Check if it starts with 'MPREb'
             if album_id.startswith("MPREb_"):
-                # Get album, then take the audioPlaylistId
                 from api.client import MusicClient
 
                 client = MusicClient()
                 playlist_id = client.api.get_album(album_id).get("audioPlaylistId")
                 GObject.idle_add(self.open_playlist, playlist_id, {"title": album_name})
             else:
-                # It's an implied playlist ID or similar
                 GObject.idle_add(self.open_playlist, album_id, {"title": album_name})
         else:
             print("No album found for the current track.")
 
     def on_sidebar_row_selected(self, box, row):
         if row:
-            # Ensure we are not in playlist view (pop if needed)
-            # Basic logic: If we are deep in nav stack, pop to root.
-            # self.nav_view.pop_to_tag("root")? No, "root" isn't a tag in that sense.
-            # pop_to_page(self.root_nav_page)
             self.nav_view.pop_to_page(self.root_nav_page)
 
             self.view_stack.set_visible_child_name(row.name_id)
@@ -4350,7 +4122,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         client = MusicClient()
 
-        # If no auth file at all and we're online, show login
         if not client.is_authenticated():
             if self._is_online():
                 print("Authentication missing. Showing login dialog.")
@@ -4360,7 +4131,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self.add_toast("No internet - running in offline mode")
             return
 
-        # Validate session in background, but only if online
         def _validate():
             if not self._is_online():
                 print("Offline - skipping auth validation, using cached session.")
@@ -4386,11 +4156,8 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def on_login_close(self, dialog):
-        # Wipe the signed-out avatar state, then kick off a fresh fetch
-        # so the new account's photo + name land in the menu.
         self._reset_avatar_profile()
         self._refresh_avatar_profile()
-        # Refresh data
         if hasattr(self, "library_page"):
             self.library_page.load_library()
         if hasattr(self, "home_page"):
@@ -4448,61 +4215,49 @@ class MainWindow(Adw.ApplicationWindow):
         self._is_compact = False
         self.remove_css_class("compact")
 
-        # Show tabs, hide title
         if hasattr(self, "title_bin") and hasattr(self, "switcher"):
             self.title_bin.set_child(self.switcher)
 
         if hasattr(self, "player_bar"):
             self.player_bar.set_compact(False)
 
-        # Close BottomSheet when moving back to desktop
         if hasattr(self, "bottom_sheet"):
             self.bottom_sheet.set_open(False)
 
-        # Restore desktop state
         if hasattr(self, "split_view"):
             GLib.idle_add(self._restore_sidebar_state)
 
-        # Dynamic Reparenting back to Stack for Desktop
         if hasattr(self, "expanded_player"):
             self.bottom_sheet.set_sheet(None)
             parent = self.expanded_player.get_parent()
             if parent != self.main_stack:
                 self.main_stack.add_named(self.expanded_player, "player")
 
-        # Same deferral trick as the apply handler.
         GLib.idle_add(self._sync_page_compact)
 
     def _restore_sidebar_state(self):
         if hasattr(self, "split_view"):
             has_queue = len(self.player.queue) > 0
-            # Sidebar is desktop-only. Don't let a pending restore open it
-            # on mobile — the queue belongs in the expanded-player's Queue
-            # tab there.
             show = (
                 self._sidebar_explicitly_opened
                 and has_queue
                 and not self._is_compact
             )
             self.split_view.set_show_sidebar(show)
-        return False  # Run once
+        return False
 
     def _sync_page_compact(self):
-        # Notify current pages
         for page_name in ["home", "library", "search"]:
             if hasattr(self, f"{page_name}_page"):
                 page = getattr(self, f"{page_name}_page")
                 if hasattr(page, "set_compact_mode"):
                     page.set_compact_mode(self._is_compact)
 
-        # Also notify any dynamic pages in navigation stacks?
-        # For simplicity, we can look at the visible page of the navigation stack
         nav = self.view_stack.get_visible_child()
         if isinstance(nav, Adw.NavigationView):
             page = nav.get_visible_page()
             if page:
                 child = page.get_child()
-                # If it's a ToolbarView, look at content
                 if isinstance(child, Adw.ToolbarView):
                     child = child.get_content()
                 if hasattr(child, "set_compact_mode"):
@@ -4512,8 +4267,6 @@ class MainWindow(Adw.ApplicationWindow):
         is_visible = split_view.get_show_sidebar()
         if hasattr(self, "player_bar"):
             self.player_bar.set_queue_active(is_visible)
-        # Window controls may need to move — if the sidebar is on the right
-        # and just became hidden, the content pane now owns the trailing edge.
         self._apply_window_controls_position()
 
     def _on_player_bar_visibility(self, player, *args):
@@ -4521,34 +4274,25 @@ class MainWindow(Adw.ApplicationWindow):
         self.player_bar_revealer.set_reveal_child(has_queue)
 
         if not has_queue:
-            # Close sidebar if queue becomes empty
             if hasattr(self, "split_view") and self.split_view.get_show_sidebar():
                 self.split_view.set_show_sidebar(False)
-                # The "context" is gone, forget the explicit-open state too.
                 self._sidebar_explicitly_opened = False
-            # Close the expanded-player sheet on mobile — otherwise it stays
-            # open over an empty queue with no player bar behind it.
             if (
                 self._is_compact
                 and hasattr(self, "bottom_sheet")
                 and self.bottom_sheet.get_open()
             ):
                 self.bottom_sheet.set_open(False)
-            # Collapse the desktop cover revealer for the same reason:
-            # no track is playing, so there's nothing for it to show.
             self._dismiss_cover_if_open()
 
     def _on_split_view_collapsed(self, split_view, param):
         collapsed = split_view.get_collapsed()
         self._apply_window_controls_position()
         if not collapsed:
-            # When uncollapsing (going back to desktop), force the state
             GLib.idle_add(self._restore_sidebar_state)
 
     def toggle_queue(self):
         """Toggles the visibility of the Queue Sidebar."""
-        # Sidebar is desktop-only. The queue is reached via the expanded
-        # player's Queue tab on mobile, so bail out of any accidental toggle.
         if self._is_compact:
             return False
         if hasattr(self, "split_view"):
@@ -4560,8 +4304,6 @@ class MainWindow(Adw.ApplicationWindow):
 
             self.split_view.set_show_sidebar(new_state)
 
-            # Persist state only when not collapsed (desktop view)
-            # or if explicitly toggled in mobile overlay
             self._sidebar_explicitly_opened = new_state
 
         # Refresh explore/search
@@ -4586,8 +4328,6 @@ class MainWindow(Adw.ApplicationWindow):
                 Gtk.StackTransitionType.SLIDE_UP
             )
             self.main_stack.set_visible_child_name("cover")
-            # Prime the cover image so the view starts with the right
-            # artwork even if no metadata-changed signal has fired yet.
             v_id = self.player.current_video_id
             if v_id:
                 thumb = self.player_bar.cover_img.url

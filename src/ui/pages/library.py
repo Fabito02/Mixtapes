@@ -234,7 +234,6 @@ class LibraryPage(Adw.Bin):
             "Loading uploads..."
         )
 
-        # 1. Playlists Section (inside lib_content_box, not content_box)
         self.playlists_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         playlists_section = self.playlists_section
 
@@ -273,7 +272,6 @@ class LibraryPage(Adw.Bin):
 
         self.lib_content_box.append(playlists_section)
 
-        # 2. Albums Section
         self.albums_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         albums_section = self.albums_section
 
@@ -299,7 +297,6 @@ class LibraryPage(Adw.Bin):
 
         self.lib_content_box.append(albums_section)
 
-        # 3. Artists Section
         self.artists_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         artists_section = self.artists_section
 
@@ -1944,7 +1941,6 @@ class UploadsPage(Gtk.Box):
         album = getattr(child, "_album_data", None)
         if not album:
             return
-        # Defer to the list-row handler's logic.
         browse_id = album.get("browseId")
         if not browse_id:
             return

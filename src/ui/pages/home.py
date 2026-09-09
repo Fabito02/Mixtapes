@@ -6,14 +6,13 @@ from gi.repository import Gtk, Adw, GObject, GLib, Pango, Gdk
 from api.client import MusicClient
 from ui.utils import (
     AsyncImage, AsyncPicture, parse_item_metadata, is_online,
-    attach_playing_highlight,
 )
 from ui.context_menu import show_item_menu
 from ui.widgets.scroll_box import HorizontalScrollBox
 from ui.util_classes import ScrolledWindow
 
 
-CARD_SIZE = 160
+CARD_SIZE = 140
 SPEED_TILE_COVER = 56
 SONG_THUMB_SIZE = 56
 
@@ -32,10 +31,6 @@ _VIDEO_SECTION_KEYS = (
 
 
 def _is_video_thumbnail(item):
-    """Songs use album-art covers (lh3.googleusercontent.com / yt3.ggpht.com);
-    music videos point at YouTube's i.ytimg.com/vi/{id}/ frames. The two URL
-    families are distinct enough to be a reliable kind hint when the raw
-    `videoType` annotation isn't available (continuation shelves)."""
     thumbs = item.get("thumbnails") or []
     for t in thumbs:
         url = (t.get("url") or "") if isinstance(t, dict) else ""
@@ -45,27 +40,14 @@ def _is_video_thumbnail(item):
 
 
 def _detect_kind(item, section_title=""):
-    """Classify a home-feed item into one of: song, video, album, playlist, artist.
-
-    Preference order:
-      1. ``videoType`` annotation (harvested from the raw home response by
-         ``client.get_home_full``). This is YT's own song/video flag and is
-         authoritative when present.
-      2. Section-title context (a shelf titled "Music videos" is videos).
-      3. Thumbnail URL family — ``i.ytimg.com/vi/...`` is a video frame,
-         ``lh3.googleusercontent.com/...`` is an album cover.
-      4. A conservative shape heuristic as a last resort.
-    """
     if not isinstance(item, dict):
         return None
 
     if item.get("videoId"):
         vtype = (item.get("videoType") or "").upper()
         if vtype:
-            # Songs that happen to live on YT as videos are tagged ATV.
             if vtype == "MUSIC_VIDEO_TYPE_ATV":
                 return "song"
-            # We don't surface podcast episodes in mixed shelves.
             if "PODCAST" in vtype or "EPISODE" in vtype:
                 return None
             return "video"
@@ -104,7 +86,6 @@ def _detect_kind(item, section_title=""):
 
 def _kind_word(kind, item):
     if kind == "album":
-        # ytmusicapi sets `type` to "Album"/"Single"/"EP" when known.
         return item.get("type") or "Album"
     return {
         "song": "Song",
@@ -151,17 +132,11 @@ _UNIT_RE = re.compile(
 
 
 def _playlist_detail(item):
-    """Return a meaningful sub-line for a playlist card, including units.
-
-    YT's `count` is just a number ("150"); the unit ("songs"/"views"/etc) lives
-    inside `description`. Pull the count-with-unit substring out when present.
-    """
     desc = (item.get("description") or "").strip()
     if desc:
         m = _UNIT_RE.search(desc)
         if m:
             return m.group(0)
-        # Fall back to the trailing subtitle segment.
         parts = [p.strip() for p in re.split(r"[•·]", desc) if p.strip()]
         if parts:
             return parts[-1]
@@ -222,7 +197,6 @@ def _song_detail(item):
 
 
 def _duration_str(item):
-    """Return a "M:SS" / "H:MM:SS" string for a song/video, or "" if unknown."""
     dur = item.get("duration")
     if dur:
         return str(dur)
@@ -249,11 +223,41 @@ def _detail_for(item, kind):
     return _song_detail(item)
 
 
+# ─── Highlight Helper: toggle playing & flat ───────────────────────────────
+
+def _attach_item_playing_state(widget, player, video_id, is_button=True):
+    """Monitors player state and toggles .playing / .flat dynamically."""
+    if not video_id:
+        return
+
+    def update_state(*args):
+        current_id = getattr(player, "current_video_id", None)
+        is_playing = bool(current_id and current_id == video_id)
+        if is_playing:
+            widget.add_css_class("playing")
+            if is_button:
+                widget.remove_css_class("flat")
+        else:
+            widget.remove_css_class("playing")
+            if is_button:
+                widget.add_css_class("flat")
+
+    update_state()
+    h_meta = player.connect("metadata-changed", update_state)
+    h_state = player.connect("state-changed", update_state)
+
+    def on_unrealize(*args):
+        try:
+            player.disconnect(h_meta)
+            player.disconnect(h_state)
+        except Exception:
+            pass
+
+    widget.connect("unrealize", on_unrealize)
+
+
 # ─── Section ordering ───────────────────────────────────────────────────────
 
-# Per the user's requested order: speed dial first (carved from Quick picks),
-# then Library, Listen Again, Daily Discover, Forgotten Favorites, then the
-# rest of whatever YT Music returned.
 _PRIORITY = [
     ("library",      ["your library", "from your library"]),
     ("listen_again", ["listen again", "your favorites", "recent activity"]),
@@ -263,7 +267,6 @@ _PRIORITY = [
 
 
 def _classify_section(title):
-    """Return the priority bucket for a section title, or None if no match."""
     if not title:
         return None
     low = title.lower()
@@ -274,18 +277,12 @@ def _classify_section(title):
 
 
 def _section_icon(title):
-    """Pick a symbolic icon to render next to a section heading. Returns None
-    if no rule matches — we deliberately don't fall back to a generic icon,
-    since that makes unrelated shelves look like they share a category."""
     if not title:
         return None
     low = title.lower()
     rules = [
-        # "From your library" mirrors the Library tab icon (vinyl).
         (["from your library", "your library"], "media-optical-symbolic"),
         (["forgotten", "rediscover", "hidden gem"], "starred-symbolic"),
-        # Daily Discover / Discover Mix specifically — not the noisier
-        # "recommended X" / "based on X" shelves where compass is a stretch.
         (["daily discover", "discovery mix", "discover mix"], "compass2-symbolic"),
         (["listen again"], "media-playback-start-symbolic"),
         (["mix"], "media-playlist-shuffle-symbolic"),
@@ -373,9 +370,6 @@ class HomePage(Adw.Bin):
         if compact:
             self.add_css_class("compact")
             self.feed_box.set_spacing(20)
-            # Pull in page margins so two 160 px cards fit side by
-            # side at 360 px (the mobile breakpoint floor) without the
-            # second one getting clipped.
             self.feed_box.set_margin_start(6)
             self.feed_box.set_margin_end(6)
         else:
@@ -383,23 +377,11 @@ class HomePage(Adw.Bin):
             self.feed_box.set_spacing(28)
             self.feed_box.set_margin_start(12)
             self.feed_box.set_margin_end(12)
-        # Tighten the gap between cards in each horizontal strip
-        # (16 → 8 px in compact). The CSS `.compact .artist-horizontal-item`
-        # rule also halves the per-card hover padding, both contribute
-        # to keeping two cards visible on a 360 px viewport.
         for strip in getattr(self, "_card_strips", []):
             strip.set_spacing(8 if compact else 16)
-        # Walk the already-built feed and shrink each AsyncPicture
-        # thumbnail (56 → 44 px) to match Explore's compact behavior.
-        # Without this, the song-list rows in Quick Picks / Listen
-        # Again / etc. stay at their desktop size on mobile widths.
         self._propagate_compact(self.feed_box, compact)
 
     def _propagate_compact(self, widget, compact):
-        """Recursively set compact mode on any descendant that exposes
-        set_compact — covers both AsyncPicture (song rows) and
-        AsyncImage (speed-dial tiles), so the quick-dial covers also
-        shrink to leave more room for text on mobile widths."""
         if hasattr(widget, "set_compact"):
             try:
                 widget.set_compact(compact)
@@ -432,9 +414,6 @@ class HomePage(Adw.Bin):
             GObject.idle_add(self._apply_home, None, "offline")
             return
         try:
-            # get_home_full attaches strapline thumbnails per shelf so we can
-            # show the seed item's cover (album/artist photo) next to "Based
-            # on …" headings — falls back to plain get_home internally.
             data = self.client.get_home_full(limit=25)
             GObject.idle_add(self._apply_home, data, None)
         except Exception as e:
@@ -514,17 +493,10 @@ class HomePage(Adw.Bin):
             s for s in sections
             if isinstance(s, dict)
             and s.get("contents")
-            # Drop podcast/show shelves outright — we don't render episodes
-            # and the rows end up looking empty otherwise.
             and not _is_podcast_section(s.get("title"))
         ]
-        # Also drop shelves whose contents collapse to nothing after kind
-        # filtering (e.g. all-episode rows).
         sections = [s for s in sections if any(_detect_kind(it, s.get("title") or "") for it in s["contents"])]
 
-        # ── 1. Speed dial ─────────────────────────────────────────────────
-        # Carve from "Quick picks", which is YT's most-personal/recent shelf.
-        # Falls back to the first available shelf if Quick picks isn't there.
         speed_items = []
         speed_consumed = None
         for sec in sections:
@@ -546,7 +518,6 @@ class HomePage(Adw.Bin):
         if speed_items:
             self._add_speed_dial(speed_items)
 
-        # ── 2. Reorder remaining sections per priority ────────────────────
         buckets = {b: None for b, _ in _PRIORITY}
         rest = []
         for sec in sections:
@@ -574,10 +545,6 @@ class HomePage(Adw.Bin):
         header.set_halign(Gtk.Align.START)
         header.add_css_class("home-section-header")
 
-        # Prefer the YT-provided "based-on" cover (album/artist/playlist
-        # thumbnail tied to the shelf) when present — it's the same affordance
-        # the YouTube Music app uses to give context for these rows. Fall
-        # back to a curated symbolic icon, then to no icon at all.
         if strapline_url:
             cover = AsyncImage(url=strapline_url, size=28, player=self.player)
             wrapper = Gtk.Box()
@@ -669,7 +636,6 @@ class HomePage(Adw.Bin):
         wrapper.append(img)
         inner_box.append(wrapper)
 
-        # Title + kind subtitle stacked vertically next to the cover
         text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_col.set_valign(Gtk.Align.CENTER)
         text_col.set_hexpand(True)
@@ -706,6 +672,8 @@ class HomePage(Adw.Bin):
         )
         tile.add_controller(lp)
 
+        _attach_item_playing_state(tile, self.player, item.get("videoId"), is_button=True)
+
         return tile
 
     def _on_speed_tile_activated(self, flowbox, child):
@@ -724,9 +692,6 @@ class HomePage(Adw.Bin):
             self._make_section_header(title, bucket, strapline_url=strapline_url)
         )
 
-        # Heuristic: a section of mostly songs renders as a rich list. Mixed
-        # / card-friendly sections (albums, playlists, artists) render as a
-        # horizontal scroll of cards.
         song_count = sum(1 for it in items if _detect_kind(it, title) == "song")
         if song_count >= max(3, int(len(items) * 0.66)):
             self._add_song_list(section_box, items, bucket, section_title=title)
@@ -753,12 +718,9 @@ class HomePage(Adw.Bin):
 
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("song-row")
-            
             row.set_child(box)
-            # Light up the row while this track is the one playing —
-            # home rows are built ad-hoc (not SongRowWidget), so they
-            # need an explicit subscription to player metadata.
-            attach_playing_highlight(box, self.player, item.get("videoId"))
+
+            _attach_item_playing_state(row, self.player, item.get("videoId"), is_button=False)
 
             thumb_url = (
                 (item.get("thumbnails") or [{}])[-1].get("url")
@@ -884,34 +846,15 @@ class HomePage(Adw.Bin):
         )
         card.add_controller(lp)
 
+        _attach_item_playing_state(card, self.player, item.get("videoId"), is_button=True)
+
         return card
-    def _on_card_key(self, controller, keyval, keycode, state, card):
-        if keyval in (
-            Gdk.KEY_Return,
-            Gdk.KEY_KP_Enter,
-            Gdk.KEY_ISO_Enter,
-            Gdk.KEY_space,
-            Gdk.KEY_KP_Space,
-        ):
-            self._activate_item(
-                card.item_data, card.item_kind, getattr(card, "queue_pool", None)
-            )
-            return True
-        return False
 
     # ─── Subtitle row with kind icon + detail ──────────────────────────────
 
     def _build_kind_subtitle(
         self, item, kind, dim=True, include_kind=True, include_kind_word=None
     ):
-        """Compact row: [kind-icon] [Kind label · detail], with optional
-        explicit badge inline. Used by both cards and song rows.
-
-        `include_kind` controls the icon. `include_kind_word` controls
-        whether the kind name ("Song", "Video", "Album") is repeated
-        in the text — useful for speed-dial tiles where the icon
-        already conveys kind and the redundant word eats text room.
-        Defaults to `include_kind` for backward compatibility."""
         if include_kind_word is None:
             include_kind_word = include_kind
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
@@ -999,10 +942,6 @@ class HomePage(Adw.Bin):
             return
 
     def _play_with_radio(self, item, queue_pool):
-        """Build the queue from this section's playable siblings and start at
-        the clicked song. After the section runs out, an auto-fetched radio
-        based on the last sibling's videoId is appended (and turns into a
-        truly infinite mix). See player.play_then_radio."""
         tracks = []
         start_index = 0
 
@@ -1035,10 +974,8 @@ class HomePage(Adw.Bin):
                 _artists_text(item),
                 thumb_url,
             )
-            # Single-track activation: still extend with radio based on it.
             seed = item.get("videoId")
             if seed and hasattr(self.player, "play_then_radio"):
-                # load_video already called set_queue; chain a radio on top.
                 self.player.play_then_radio(self.player.queue, 0, seed)
             return
 
@@ -1088,3 +1025,4 @@ class HomePage(Adw.Bin):
             client=self.client,
             prefix="row",
         )
+        
