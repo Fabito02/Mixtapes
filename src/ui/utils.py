@@ -396,39 +396,26 @@ def decode_pixbuf_bounded(data, max_dim=MAX_CACHED_DIM):
 
 
 def get_high_res_url(url, target_size=None):
-    """Rewrites Google Image URLs to request a high resolution (800x800).
-    Also strips sqp and rs parameters which constrain resolution, UNLESS it's a locker track.
-    """
     if not url:
         return url
 
-    # 1. Clean up parameters that constrain resolution
-    # Strip sqp and rs which are often used to force small/safe thumbnails
-    # CRITICAL: Some URL families REQUIRE these params and 404 without them:
-    #   - vi_locker (locker tracks)
-    #   - pl_c (custom playlist covers — sqp/rs are signed access tokens)
-    # Stripping them on pl_c made every library tile fail its primary fetch
-    # and fall back to the original URL, doubling the network load when
-    # opening anything while the library grid is still hydrating.
     if "vi_locker" not in url and "/pl_c/" not in url:
         clean_url = re.sub(r"([?&])(sqp|rs)=[^&]*&?", r"\1", url)
         clean_url = clean_url.replace("?&", "?").rstrip("?&")
     else:
         clean_url = url
 
-    # 2. Upgrade resolution/quality based on domain
     if "i.ytimg.com" in clean_url:
         for q in _YTIMG_QUALITIES:
             if q in clean_url:
                 return clean_url.replace(q, "maxresdefault")
         return clean_url
+    dim = (target_size * 2) if target_size else 544
 
     if "googleusercontent.com" in clean_url or "ggpht.com" in clean_url:
-        # If it has w/h, only update those and ignore s
         if re.search(r"([=-])w\d+-h\d+", clean_url):
-            return re.sub(r"([=-])w\d+-h\d+", r"\1w800-h800", clean_url)
-        # Otherwise update s
-        return re.sub(r"([=-])s\d+(?=-|$)", r"\1s800", clean_url)
+            return re.sub(r"([=-])w\d+-h\d+", rf"\1w{dim}-h{dim}", clean_url)
+        return re.sub(r"([=-])s\d+(?=-|$)", rf"\1s{dim}", clean_url)
 
     return clean_url
 
@@ -748,18 +735,6 @@ def attach_playing_highlight(row_widget, player, video_id):
             target.remove_css_class("playing")
             target.add_css_class("flat")
 
-    try:
-        handler = player.connect("metadata-changed", _refresh)
-    except Exception:
-        return
-
-    def _cleanup(*_):
-        try:
-            player.disconnect(handler)
-        except Exception:
-            pass
-
-    row_widget.connect("destroy", _cleanup)
     _refresh()
 
 
@@ -1141,13 +1116,9 @@ class AsyncImage(Gtk.Image):
         except Exception:
             if fallbacks and self.url == url:
                 next_url = fallbacks.pop(0)
-                self.url = next_url  # Update current URL to match the fallback
-
-                # If we have a player, notify it about the working fallback URL
-                # when it finally succeeds. This is handled in _apply_pixbuf.
-
+                self.url = next_url
                 print(f"Trying fallback: {next_url}")
-                self._fetch_image(next_url, fallbacks)
+                submit_fetch(self._fetch_image, next_url, fallbacks)
 
     def _apply_pixbuf(self, pixbuf, url=None):
         # Race condition check: only apply if the URL hasn't changed since request
@@ -1453,9 +1424,9 @@ class AsyncPicture(Gtk.Picture):
             if fallbacks and self.url == url:
                 next_url = fallbacks.pop(0)
                 self.url = next_url
-                self._fetch_image(next_url, target_size, crop, fallbacks)
+                print(f"Trying fallback: {next_url}")
+                submit_fetch(self._fetch_image, next_url, fallbacks)
             else:
-                # Last resort: try local cover for downloaded songs
                 try:
                     local = self._get_local_cover()
                     if local and local != url:
@@ -1583,6 +1554,25 @@ def notify_like_changed(video_id, status):
             btn.update_icon()
 
     return GLib.SOURCE_REMOVE
+
+def bind_weak_signal(emitter, signal_name, lifecycle_obj, callback):
+    weak_obj = weakref.ref(lifecycle_obj)
+    
+    handler_id = [None] 
+
+    def _wrapper(*args, **kwargs):
+        if weak_obj() is None:
+            if handler_id[0] is not None:
+                try:
+                    emitter.disconnect(handler_id[0])
+                except Exception as e:
+                    pass
+            return False
+            
+        return callback(*args, **kwargs)
+
+    handler_id[0] = emitter.connect(signal_name, _wrapper)
+    return handler_id[0]
 
 
 class LikeButton(Gtk.Button):

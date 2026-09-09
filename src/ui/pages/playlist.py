@@ -4,7 +4,7 @@ import shutil
 import tempfile
 from gi.repository import Gtk, Adw, GObject, GLib, Pango, Gdk, Gio, GdkPixbuf
 from api.client import MusicClient
-from ui.utils import AsyncImage, LikeButton, get_yt_music_link, show_toast
+from ui.utils import AsyncImage, LikeButton, get_yt_music_link, show_toast, bind_weak_signal
 from ui.context_menu import MenuAction, show_song_menu
 from ui.crop_dialog import ImageCropDialog
 from ui.util_classes import ScrolledWindow
@@ -793,26 +793,26 @@ class PlaylistPage(Adw.Bin):
         }
         row._lv_full_track = t
 
-        def sync_playing_state(_r, target_vid):
-            curr = getattr(self.player, "current_video_id", None)
-            if curr and curr == target_vid:
-                _r.add_css_class("playing")
-                _r.remove_css_class("flat")
+        def _sync_playing(p, *args):
+            curr = getattr(p, "current_video_id", None)
+            if curr and curr == video_id:
+                row.add_css_class("playing")
+                row.remove_css_class("flat")
             else:
-                _r.remove_css_class("playing")
-                _r.add_css_class("flat")
+                row.remove_css_class("playing")
+                row.add_css_class("flat")
 
-        sync_playing_state(row, video_id)
+        _sync_playing(self.player)
 
         if getattr(row, "_lv_player_handler", None):
             try:
                 self.player.disconnect(row._lv_player_handler)
             except Exception:
                 pass
+            row._lv_player_handler = None
 
-        row._lv_player_handler = self.player.connect(
-            "metadata-changed",
-            lambda p, *args, _r=row, _v=video_id: sync_playing_state(_r, _v),
+        row._lv_player_handler = bind_weak_signal(
+            self.player, "metadata-changed", row, _sync_playing
         )
 
     def _unbind_list_item(self, factory, list_item):
@@ -1170,10 +1170,13 @@ class PlaylistPage(Adw.Bin):
             else:
                 self.emit("header-title-changed", "")
         self._refresh_more_menu()
-        # Connect download signals for live indicator updates
         dm = self.player.download_manager
-        self._dl_queued_id = dm.connect("item-queued", self._on_dl_indicator_update)
-        self._dl_done_id = dm.connect("item-done", self._on_dl_item_done)
+        self._dl_queued_id = bind_weak_signal(
+            dm, "item-queued", self, self._on_dl_indicator_update
+        )
+        self._dl_done_id = bind_weak_signal(
+            dm, "item-done", self, self._on_dl_item_done
+        )
 
     def _refresh_more_menu(self, is_owned=False):
         """Mark the more-menu as needing a rebuild; defer the actual work
@@ -1191,28 +1194,20 @@ class PlaylistPage(Adw.Bin):
 
         self.more_menu_model.remove_all()
 
-        # Queue actions
         queue_section = Gio.Menu()
         queue_section.append("Play Next", "page.play_all_next")
         queue_section.append("Add to Queue", "page.add_all_to_queue")
         self.more_menu_model.append_section(None, queue_section)
-
-        # 1. Add All to Playlist — opens the custom popover (covers + search
-        # + recents-first) instead of a plain Gio.Menu submenu. The popover
-        # loads the list itself, so don't block the menu on that fetch.
         if self.client.is_authenticated():
             self.more_menu_model.append(
                 "Add all to Playlist…", "page.show_add_all_to_playlist"
             )
 
-        # 2. Start Radio (online only)
         if is_online() and (getattr(self, "_audio_playlist_id", None) or self.playlist_id):
             self.more_menu_model.append("Start Radio", "page.start_radio")
 
-        # 3. Copy Link (Always shown)
         self.more_menu_model.append("Copy Link", "page.copy_link")
 
-        # 3. Save/Unsave from Library (not for owned playlists - they're always in library)
         if not is_owned and self.client.is_authenticated():
             if self._is_saved_to_library:
                 self.more_menu_model.append(
@@ -1221,10 +1216,8 @@ class PlaylistPage(Adw.Bin):
             else:
                 self.more_menu_model.append("Add to Library", "page.save_to_library")
 
-        # 4. Download All
         self.more_menu_model.append("Download All", "page.download_all")
 
-        # 5. Edit/Delete (Only if owned/editable)
         if is_owned:
             self.more_menu_model.append("Edit Playlist", "page.edit")
             self.more_menu_model.append("Delete Playlist", "page.delete")

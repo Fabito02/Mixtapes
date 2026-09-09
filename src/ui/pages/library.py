@@ -100,7 +100,7 @@ def _make_library_card(player, title, subtitle, thumb_url, fallback_icon, on_cli
         wrapper.append(icon_box)
         img = None
     else:
-        img = AsyncImage(url=thumb_url, size=None, player=player)
+        img = AsyncImage(url=thumb_url, width=150, height=150, player=player)
         img.add_css_class("card-cover-img")
         if not thumb_url and fallback_icon:
             img.set_from_icon_name(fallback_icon)
@@ -669,7 +669,7 @@ class LibraryPage(Adw.Bin):
             prev_child = card
 
     def _rebuild_playlists_grid(self, playlists):
-        playlists.insert(0, {'title': 'Downloads', 'playlistId': 'DL', 'thumbnails': [{'url': '', 'width': 192, 'height': 192}, {'url': '', 'width': 576, 'height': 576}], 'owned': False, 'description': 'Downloaded songs'})
+        playlists.insert(2, {'title': 'Downloads', 'playlistId': 'DL', 'thumbnails': [{'url': '', 'width': 192, 'height': 192}, {'url': '', 'width': 576, 'height': 576}], 'owned': False, 'description': 'Downloaded songs'})
         from ui.utils import is_online
 
         offline = not is_online()
@@ -686,7 +686,9 @@ class LibraryPage(Adw.Bin):
                 subtitle = f"{count} songs" if count and "songs" not in str(count) else str(count or "")
 
             thumbnails = p.get("thumbnails", [])
-            thumb_url = thumbnails[0]["url"] if thumbnails else None
+            valid_thumbs = [t for t in thumbnails if t.get("url")]
+            best_thumb = max(valid_thumbs, key=lambda t: t.get("width", 0), default=None)
+            thumb_url = best_thumb["url"] if best_thumb else None
             
             from ui.utils import (
                 save_playlist_cover_async,
@@ -752,8 +754,10 @@ class LibraryPage(Adw.Bin):
             subtitle_parts = [p for p in [artist_str, str(year) if year else ""] if p]
             subtitle = " • ".join(subtitle_parts)
             thumbnails = album.get("thumbnails", [])
-            thumb_url = thumbnails[-1]["url"] if thumbnails else None
-
+            valid_thumbs = [t for t in thumbnails if t.get("url")]
+            best_thumb = max(valid_thumbs, key=lambda t: t.get("width", 0), default=None)
+            thumb_url = best_thumb["url"] if best_thumb else None
+            
             card = existing.get(browse_id)
             if card is not None:
                 self._update_card_text(card, title, subtitle)

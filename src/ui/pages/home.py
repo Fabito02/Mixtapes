@@ -5,7 +5,7 @@ from gi.repository import Gtk, Adw, GObject, GLib, Pango, Gdk
 
 from api.client import MusicClient
 from ui.utils import (
-    AsyncImage, AsyncPicture, parse_item_metadata, is_online,
+    AsyncImage, AsyncPicture, parse_item_metadata, is_online, bind_weak_signal
 )
 from ui.context_menu import show_item_menu
 from ui.widgets.scroll_box import HorizontalScrollBox
@@ -243,17 +243,8 @@ def _attach_item_playing_state(widget, player, video_id, is_button=True):
                 widget.add_css_class("flat")
 
     update_state()
-    h_meta = player.connect("metadata-changed", update_state)
-    h_state = player.connect("state-changed", update_state)
-
-    def on_unrealize(*args):
-        try:
-            player.disconnect(h_meta)
-            player.disconnect(h_state)
-        except Exception:
-            pass
-
-    widget.connect("unrealize", on_unrealize)
+    bind_weak_signal(player, "metadata-changed", widget, update_state)
+    bind_weak_signal(player, "state-changed", widget, update_state)
 
 
 # ─── Section ordering ───────────────────────────────────────────────────────
