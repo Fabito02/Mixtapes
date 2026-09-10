@@ -3322,15 +3322,25 @@ class PlaylistPage(Adw.Bin):
                 downloads = db.get_all_downloads()
                 tracks = []
                 for d in downloads:
+                    artist_name = d.get("artist", "")
+                    artist_id = d.get("artist_id") or None
+                    album_name = d.get("album", "")
+                    album_id = d.get("album_id") or None
+                    like_status = d.get("like_status") or "INDIFFERENT"
+
                     t = {
                         "videoId": d.get("video_id"),
                         "title": d.get("title", "Unknown"),
                         "artists": (
-                            [{"name": d.get("artist", ""), "id": None}]
-                            if d.get("artist") else []
+                            [{"name": artist_name, "id": artist_id}]
+                            if artist_name else []
                         ),
-                        "album": {"name": d.get("album", "")},
+                        "album": (
+                            {"name": album_name, "id": album_id}
+                            if album_name else None
+                        ),
                         "duration_seconds": d.get("duration_seconds", 0),
+                        "likeStatus": like_status,
                         "thumbnails": (
                             [{"url": d.get("thumbnail_url")}]
                             if d.get("thumbnail_url") else []
@@ -3341,7 +3351,7 @@ class PlaylistPage(Adw.Bin):
                         t["duration"] = f"{dur // 60}:{dur % 60:02d}"
                     tracks.append(t)
                 GLib.idle_add(self._reshow_virtual, "Downloaded Songs", tracks,
-                              f"{len(tracks)} songs available offline")
+                                f"{len(tracks)} songs available offline")
 
             threading.Thread(target=_fetch, daemon=True).start()
             return

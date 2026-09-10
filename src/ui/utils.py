@@ -41,7 +41,6 @@ _PROBE_WAITERS = []
 _FORCE_OFFLINE_CACHE = {"value": False, "expires": 0.0}
 _FORCE_OFFLINE_TTL = 10.0
 
-_LIKE_CACHE = {}
 _ACTIVE_LIKE_BUTTONS = weakref.WeakSet()
 
 def _check_force_offline():
@@ -1606,7 +1605,6 @@ def notify_like_changed(video_id, status):
     if not video_id:
         return GLib.SOURCE_REMOVE
 
-    _LIKE_CACHE[video_id] = status
     for btn in list(_ACTIVE_LIKE_BUTTONS):
         if getattr(btn, "video_id", None) == video_id:
             btn.status = status
@@ -1650,12 +1648,7 @@ class LikeButton(Gtk.Button):
         self.video_id = video_id
         _ACTIVE_LIKE_BUTTONS.add(self)
 
-        if video_id and video_id in _LIKE_CACHE:
-            self.status = _LIKE_CACHE[video_id]
-        else:
-            self.status = initial_status
-            if video_id:
-                _LIKE_CACHE[video_id] = initial_status
+        self.status = initial_status
 
         self.add_css_class("flat")
         self.add_css_class("circular")
@@ -1686,26 +1679,33 @@ class LikeButton(Gtk.Button):
 
         notify_like_changed(self.video_id, new_status)
 
+        player = getattr(self.client, "player", None) or getattr(self, "player", None)
+        if player and hasattr(player, "queue"):
+            for track in player.queue:
+                if track.get("videoId") == self.video_id:
+                    track["likeStatus"] = new_status
+                    break
+
         def do_rate():
             success = self.client.rate_song(self.video_id, new_status)
             if not success:
                 GLib.idle_add(notify_like_changed, self.video_id, old_status)
+                if player and hasattr(player, "queue"):
+                    for track in player.queue:
+                        if track.get("videoId") == self.video_id:
+                            track["likeStatus"] = old_status
+                            break
             else:
                 if new_status == "INDIFFERENT":
                     from player.downloads import get_download_db
                     get_download_db().invalidate_playlist_cache("LM")
 
-        thread = threading.Thread(target=do_rate, daemon=True)
-        thread.start()
+        threading.Thread(target=do_rate, daemon=True).start()
 
     def set_data(self, video_id, status):
         self.video_id = video_id
         if video_id:
-            if video_id in _LIKE_CACHE:
-                self.status = _LIKE_CACHE[video_id]
-            else:
-                self.status = status or "INDIFFERENT"
-                _LIKE_CACHE[video_id] = self.status
+            self.status = status or "INDIFFERENT"
         else:
             self.status = status or "INDIFFERENT"
 
