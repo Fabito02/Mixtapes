@@ -272,11 +272,15 @@ class CategoryPage(Adw.Bin):
             title_label.set_halign(Gtk.Align.START)
             title_label.set_ellipsize(Pango.EllipsizeMode.END)
             title_label.set_lines(1)
+            title_label.set_width_chars(1)
+            title_label.set_xalign(0.0)
 
             subtitle_label = Gtk.Label(label=subtitle)
             subtitle_label.set_halign(Gtk.Align.START)
             subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
             subtitle_label.set_lines(1)
+            subtitle_label.set_width_chars(1)
+            subtitle_label.set_xalign(0.0)
             subtitle_label.add_css_class("dim-label")
             subtitle_label.add_css_class("caption")
 

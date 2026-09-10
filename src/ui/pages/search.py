@@ -198,6 +198,8 @@ class SearchPage(Adw.Bin):
         label.set_halign(Gtk.Align.START)
         label.set_ellipsize(Pango.EllipsizeMode.END)
         label.set_lines(1)
+        label.set_width_chars(1)
+        label.set_xalign(0.0)
         label.add_css_class("caption")
         if dim:
             label.add_css_class("dim-label")
@@ -651,12 +653,18 @@ class SearchPage(Adw.Bin):
             name_label.set_halign(Gtk.Align.START)
             name_label.set_ellipsize(Pango.EllipsizeMode.END)
             name_label.set_lines(1)
+            name_label.set_width_chars(1)
+            name_label.set_xalign(0.0)
             vbox.append(name_label)
 
             subs = artist.get("subscribers", "")
             if subs:
                 sub_label = Gtk.Label(label=subs)
                 sub_label.set_halign(Gtk.Align.START)
+                sub_label.set_ellipsize(Pango.EllipsizeMode.END)
+                sub_label.set_lines(1)
+                sub_label.set_width_chars(1)
+                sub_label.set_xalign(0.0)
                 sub_label.add_css_class("dim-label")
                 sub_label.add_css_class("caption")
                 vbox.append(sub_label)
@@ -833,6 +841,8 @@ class SearchPage(Adw.Bin):
             title_label.set_halign(Gtk.Align.START)
             title_label.set_ellipsize(Pango.EllipsizeMode.END)
             title_label.set_lines(1)
+            title_label.set_width_chars(1)
+            title_label.set_xalign(0.0)
 
             kind = _detect_kind(item)
             sub_row = self._build_kind_subtitle(item, kind, subtitle_text=subtitle, dim=True)

@@ -52,6 +52,10 @@ class AllMoodsPage(Adw.Bin):
             
             lbl = Gtk.Label(label=item.get("title", ""))
             lbl.set_halign(Gtk.Align.START)
+            lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            lbl.set_lines(1)
+            lbl.set_width_chars(1)
+            lbl.set_xalign(0.0)
             lbl.set_hexpand(True)
             box.append(lbl)
             

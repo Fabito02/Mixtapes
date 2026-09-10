@@ -641,7 +641,7 @@ class HomePage(Adw.Bin):
         title_label.set_lines(2)
         title_label.set_wrap(True)
         title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        title_label.set_max_width_chars(1)
+        title_label.set_width_chars(1)
         title_label.set_hexpand(True)
         title_label.add_css_class("home-speed-title")
         text_col.append(title_label)
@@ -746,6 +746,8 @@ class HomePage(Adw.Bin):
             title_lbl.set_halign(Gtk.Align.START)
             title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
             title_lbl.set_lines(1)
+            title_lbl.set_width_chars(1)
+            title_lbl.set_xalign(0.0)
 
             title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             title_box.append(title_lbl)
@@ -757,7 +759,7 @@ class HomePage(Adw.Bin):
                 title_box.append(explicit_badge)
 
             vbox.append(title_box)
-            vbox.append(self._build_kind_subtitle(item, kind, dim=True))
+            vbox.append(self._build_kind_subtitle(item, kind, dim=True, constrain_width=True))
             box.append(vbox)
 
             self._attach_context_menu(row, item, kind)
@@ -853,8 +855,8 @@ class HomePage(Adw.Bin):
             label.set_halign(Gtk.Align.START)
             label.set_ellipsize(Pango.EllipsizeMode.END)
             label.set_lines(1)
+            label.set_width_chars(1)
             if constrain_width:
-                label.set_max_width_chars(1)
                 label.set_halign(Gtk.Align.FILL)
                 label.set_xalign(0)
                 label.set_hexpand(True)

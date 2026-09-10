@@ -194,6 +194,18 @@ box.song-row, .song-row-button {
   background-color: transparent;
 }
 
+list,
+list > row,
+listbox,
+listboxrow {
+  min-width: 0;
+}
+
+list > row label,
+listboxrow label {
+  min-width: 0;
+}
+
 .playing {
   color: @playing_fg;
 }
