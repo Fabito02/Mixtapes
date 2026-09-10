@@ -5,6 +5,9 @@ from ui.utils import AsyncPicture, LikeButton, parse_item_metadata, attach_playi
 from ui.context_menu import show_item_menu
 from ui.util_classes import ScrolledWindow
 from ui.widgets.scroll_box import HorizontalScrollBox
+from ui.widgets.media_card import MediaCardWidget
+
+CARD_SIZE = 150
 
 def _is_video_thumbnail(item):
     thumbs = item.get("thumbnails") or []
@@ -548,57 +551,15 @@ class SearchPage(Adw.Bin):
             self._add_chart_artists("Top Artists", artists)
 
     def _make_chart_card(self, item, on_clicked=None):
-        child = Gtk.Button()
-        child.add_css_class("activatable")
-        child.add_css_class("artist-horizontal-item")
-        child.add_css_class("flat")
-        child.item_data = item
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        child.set_child(box)
-
-        thumbnails = item.get("thumbnails", [])
-        thumb_url = thumbnails[-1].get("url") if thumbnails else None
-
-        img = AsyncPicture(url=thumb_url, target_size=150, player=self.player)
-        if not thumb_url:
-            img.set_from_icon_name("media-playlist-audio-symbolic")
-
-        wrapper = Gtk.Box()
-        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-        wrapper.add_css_class("card-cover")
-        wrapper.set_halign(Gtk.Align.CENTER)
-        wrapper.append(img)
-        box.append(wrapper)
-
-        title = item.get("title", "")
-        title_label = Gtk.Label(label=title)
-        title_label.set_halign(Gtk.Align.START)
-        title_label.set_ellipsize(Pango.EllipsizeMode.END)
-        title_label.set_wrap(True)
-        title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        title_label.set_lines(2)
-        title_label.set_justify(Gtk.Justification.LEFT)
-        title_label.set_tooltip_text(title)
-
-        title_clamp = Adw.Clamp()
-        title_clamp.set_child(title_label)
-        box.append(title_clamp)
-
-        subtitle = item.get("subtitle") or item.get("description")
-        kind = _detect_kind(item, default_kind="video" if "video" in str(item.get("type", "")).lower() else "playlist")
-        sub_widget = self._build_kind_subtitle(item, kind, subtitle_text=subtitle or "", dim=True)
-
-        subtitle_clamp = Adw.Clamp()
-        subtitle_clamp.set_child(sub_widget)
-        box.append(subtitle_clamp)
-
-        child._cover_img = img
-
-        if on_clicked:
-            child.connect("clicked", lambda btn: on_clicked(btn, item))
-
-        return child
+        subtitle = item.get("subtitle") or item.get("description") or ""
+        card = MediaCardWidget(
+            item,
+            player=self.player,
+            title_lines=2,
+            subtitle_text=subtitle,
+            on_clicked=lambda btn, it: on_clicked(btn, it) if on_clicked else None
+        )
+        return card
 
     def _add_chart_playlists(self, title, items):
         section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)

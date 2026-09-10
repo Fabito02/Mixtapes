@@ -10,12 +10,10 @@ from ui.utils import (
 from ui.context_menu import show_item_menu
 from ui.widgets.scroll_box import HorizontalScrollBox
 from ui.util_classes import ScrolledWindow
+from ui.widgets.media_card import MediaCardWidget
 
-
-CARD_SIZE = 150
 SPEED_TILE_COVER = 56
 SONG_THUMB_SIZE = 56
-
 
 # ─── Helpers: kind detection / labelling ────────────────────────────────────
 
@@ -789,65 +787,28 @@ class HomePage(Adw.Bin):
         section_box.append(scroll_box)
 
     def _build_card(self, item, kind, siblings, section_title=""):
-        card = Gtk.Button()
-        card.add_css_class("activatable")
-        card.add_css_class("artist-horizontal-item")
-        card.add_css_class("flat")
-        card.item_data = item
+        card = MediaCardWidget(
+            item,
+            player=self.player,
+            title_lines=1,
+            on_clicked=lambda btn, it: self._on_card_clicked(btn)
+        )
         card.item_kind = kind
         card.queue_pool = [
             it for it in siblings if _detect_kind(it, section_title) in ("song", "video")
         ]
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        card.set_child(box)
-
-        thumb_url = (
-            (item.get("thumbnails") or [{}])[-1].get("url")
-            if item.get("thumbnails") else None
-        )
-        img = AsyncImage(url=thumb_url, size=CARD_SIZE, player=self.player)
-        img.video_id = item.get("videoId") or item.get("playlistId") or item.get("browseId")
-
-        wrapper = Gtk.Box()
-        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-        wrapper.add_css_class("card-cover")
-        wrapper.set_halign(Gtk.Align.CENTER)
-        wrapper.append(img)
-        box.append(wrapper)
-
-        title_lbl = Gtk.Label(label=item.get("title", ""))
-        title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
-        title_lbl.set_wrap(True)
-        title_lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        title_lbl.set_lines(1)
-        title_lbl.set_justify(Gtk.Justification.LEFT)
-        title_lbl.set_halign(Gtk.Align.START)
-        title_clamp = Adw.Clamp()
-        title_clamp.set_child(title_lbl)
-        box.append(title_clamp)
-
-        sub_widget = self._build_kind_subtitle(item, kind, dim=True, include_kind=True)
-        sub_clamp = Adw.Clamp()
-        sub_clamp.set_child(sub_widget)
-        box.append(sub_clamp)
-
-        card.connect("clicked", self._on_card_clicked)
-
+    
         right = Gtk.GestureClick()
         right.set_button(3)
         right.connect("released", self._on_card_right_click, card)
         card.add_controller(right)
-
+    
         lp = Gtk.GestureLongPress()
         lp.connect(
             "pressed",
             lambda g, x, y, c=card: self._on_card_right_click(g, 1, x, y, c),
         )
         card.add_controller(lp)
-
-        _attach_item_playing_state(card, self.player, item.get("videoId"), is_button=True)
-
         return card
 
     # ─── Subtitle row with kind icon + detail ──────────────────────────────

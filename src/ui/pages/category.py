@@ -6,8 +6,7 @@ from ui.context_menu import MenuAction, show_item_menu, show_song_menu
 from ui.util_classes import ScrolledWindow
 from ui.utils import AsyncImage, AsyncPicture, LikeButton, copy_to_clipboard, parse_item_metadata
 from ui.widgets.scroll_box import HorizontalScrollBox
-
-CARD_SIZE = 150
+from ui.widgets.media_card import MediaCardWidget
 
 
 class CategoryPage(Adw.Bin):
@@ -166,111 +165,24 @@ class CategoryPage(Adw.Bin):
         self._loading_wrap.set_visible(False)
 
     def _make_card(self, item):
-        card = Gtk.Button()
-        card.add_css_class("activatable")
-        card.add_css_class("artist-horizontal-item")
-        card.add_css_class("flat")
-        card.set_size_request(CARD_SIZE, -1)
-        card.set_hexpand(False)
-        card.set_halign(Gtk.Align.START)
-        card.item_data = item
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.set_size_request(CARD_SIZE, -1)
-        card.set_child(box)
-
-        thumbnails = item.get("thumbnails", [])
-        thumb_url = thumbnails[-1].get("url") if thumbnails else None
-
-        img = AsyncImage(url=thumb_url, size=CARD_SIZE, player=self.player)
-        img.video_id = (
-            item.get("videoId") or item.get("playlistId") or item.get("browseId")
+        card = MediaCardWidget(
+            item,
+            player=self.player,
+            title_lines=1,
+            on_clicked=lambda btn, it: self._on_item_clicked(None, 1, 0, 0, it)
         )
-        if not thumb_url:
-            img.set_from_icon_name("media-playlist-audio-symbolic")
-
-        wrapper = Gtk.Box()
-        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-        wrapper.add_css_class("card-cover")
-        wrapper.set_halign(Gtk.Align.CENTER)
-        wrapper.append(img)
-        box.append(wrapper)
-
-        title = item.get("title", "")
-        title_label = Gtk.Label(label=title)
-        title_label.set_halign(Gtk.Align.START)
-        title_label.set_ellipsize(Pango.EllipsizeMode.END)
-        title_label.set_wrap(True)
-        title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        title_label.set_lines(1)
-        title_label.set_justify(Gtk.Justification.LEFT)
-        title_label.set_tooltip_text(title)
-
-        title_clamp = Adw.Clamp()
-        title_clamp.set_maximum_size(CARD_SIZE)
-        title_clamp.set_tightening_threshold(CARD_SIZE)
-        title_clamp.set_child(title_label)
-        box.append(title_clamp)
-
-        meta = parse_item_metadata(item)
-        parts = []
-        if meta["year"]:
-            parts.append(meta["year"])
-        if meta["type"]:
-            parts.append(meta["type"])
-
-        subtitle_text = " • ".join(parts)
-        if not subtitle_text and item.get("artists"):
-            artists = item.get("artists")
-            if isinstance(artists, list):
-                subtitle_text = ", ".join([a.get("name", "") for a in artists if isinstance(a, dict)])
-            else:
-                subtitle_text = str(artists)
-
-        subtitle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        subtitle_box.set_halign(Gtk.Align.START)
-        subtitle_box.set_hexpand(True)
-
-        if meta["is_explicit"]:
-            explicit_lbl = Gtk.Label(label="E")
-            explicit_lbl.set_justify(Gtk.Justification.CENTER)
-            explicit_lbl.set_halign(Gtk.Align.CENTER)
-            explicit_lbl.add_css_class("explicit-badge")
-            subtitle_box.append(explicit_lbl)
-
-        if subtitle_text:
-            subtitle_lbl = Gtk.Label(label=subtitle_text)
-            subtitle_lbl.add_css_class("caption")
-            subtitle_lbl.add_css_class("dim-label")
-            subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
-            subtitle_lbl.set_lines(1)
-            subtitle_lbl.set_hexpand(True)
-            subtitle_lbl.set_halign(Gtk.Align.START)
-            subtitle_box.append(subtitle_lbl)
-
-        if subtitle_text or meta["is_explicit"]:
-            subtitle_clamp = Adw.Clamp()
-            subtitle_clamp.set_maximum_size(CARD_SIZE)
-            subtitle_clamp.set_tightening_threshold(CARD_SIZE)
-            subtitle_clamp.set_child(subtitle_box)
-            box.append(subtitle_clamp)
-
-        card._cover_img = img
-
-        card.connect("clicked", lambda btn: self._on_item_clicked(None, 1, 0, 0, item))
-
+    
         gesture = Gtk.GestureClick()
         gesture.set_button(3)
         gesture.connect("released", self.on_grid_right_click, card)
         card.add_controller(gesture)
-
+    
         lp = Gtk.GestureLongPress()
         lp.connect(
             "pressed",
             lambda g, x, y, c=card: self.on_grid_right_click(g, 1, x, y, c),
         )
         card.add_controller(lp)
-
         return card
 
     def _add_carousel(self, title, items):

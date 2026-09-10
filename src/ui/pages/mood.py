@@ -5,8 +5,7 @@ from api.client import MusicClient
 from ui.context_menu import MenuAction, show_item_menu
 from ui.util_classes import ScrolledWindow
 from ui.utils import AsyncImage, copy_to_clipboard, parse_item_metadata
-
-CARD_SIZE = 150
+from ui.widgets.media_card import MediaCardWidget
 
 
 class MoodPage(Adw.Bin):
@@ -151,108 +150,25 @@ class MoodPage(Adw.Bin):
         threading.Thread(target=fetch_func, daemon=True).start()
 
     def _make_card(self, item):
-        child = Gtk.Button()
-        child.add_css_class("activatable")
-        child.add_css_class("artist-horizontal-item")
-        child.add_css_class("flat")
-        child.set_size_request(CARD_SIZE, -1)
-        child.set_hexpand(False)
-        child.set_halign(Gtk.Align.START)
-        child.item_data = item
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.set_size_request(CARD_SIZE, -1)
-        child.set_child(box)
-
-        thumbnails = item.get("thumbnails", [])
-        thumb_url = thumbnails[-1].get("url") if thumbnails else None
-
-        img = AsyncImage(url=thumb_url, size=CARD_SIZE, player=self.player)
-        img.video_id = (
-            item.get("videoId") or item.get("playlistId") or item.get("browseId")
+        card = MediaCardWidget(
+            item,
+            player=self.player,
+            title_lines=1,
+            on_clicked=lambda btn, it: self.on_card_clicked(btn)
         )
-        if not thumb_url:
-            img.set_from_icon_name("media-playlist-audio-symbolic")
-
-        wrapper = Gtk.Box()
-        wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-        wrapper.add_css_class("card-cover")
-        wrapper.set_halign(Gtk.Align.CENTER)
-        wrapper.append(img)
-        box.append(wrapper)
-
-        title = item.get("title", "")
-        title_label = Gtk.Label(label=title)
-        title_label.set_halign(Gtk.Align.START)
-        title_label.set_ellipsize(Pango.EllipsizeMode.END)
-        title_label.set_wrap(True)
-        title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        title_label.set_lines(1)
-        title_label.set_justify(Gtk.Justification.LEFT)
-        title_label.set_tooltip_text(title)
-
-        title_clamp = Adw.Clamp()
-        title_clamp.set_maximum_size(CARD_SIZE)
-        title_clamp.set_tightening_threshold(CARD_SIZE)
-        title_clamp.set_child(title_label)
-        box.append(title_clamp)
-
-        meta = parse_item_metadata(item)
-        parts = []
-        if meta.get("year"):
-            parts.append(meta["year"])
-        if meta.get("type") and meta["type"].lower() not in [p.lower() for p in parts]:
-            parts.append(meta["type"])
-
-        subtitle_text = " • ".join(parts)
-        if not subtitle_text:
-            subtitle_text = item.get("subtitle") or item.get("description") or ""
-
-        subtitle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        subtitle_box.set_halign(Gtk.Align.START)
-        subtitle_box.set_hexpand(True)
-
-        if meta.get("is_explicit"):
-            explicit_lbl = Gtk.Label(label="E")
-            explicit_lbl.set_justify(Gtk.Justification.CENTER)
-            explicit_lbl.set_halign(Gtk.Align.CENTER)
-            explicit_lbl.add_css_class("explicit-badge")
-            subtitle_box.append(explicit_lbl)
-
-        if subtitle_text:
-            subtitle_lbl = Gtk.Label(label=subtitle_text)
-            subtitle_lbl.add_css_class("caption")
-            subtitle_lbl.add_css_class("dim-label")
-            subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
-            subtitle_lbl.set_lines(1)
-            subtitle_lbl.set_hexpand(True)
-            subtitle_lbl.set_halign(Gtk.Align.START)
-            subtitle_box.append(subtitle_lbl)
-
-        if subtitle_text or meta.get("is_explicit"):
-            subtitle_clamp = Adw.Clamp()
-            subtitle_clamp.set_maximum_size(CARD_SIZE)
-            subtitle_clamp.set_tightening_threshold(CARD_SIZE)
-            subtitle_clamp.set_child(subtitle_box)
-            box.append(subtitle_clamp)
-
-        child._cover_img = img
-
-        child.connect("clicked", lambda btn: self.on_card_clicked(btn))
-
+    
         gesture = Gtk.GestureClick()
         gesture.set_button(3)
-        gesture.connect("pressed", self.on_grid_right_click, child)
-        child.add_controller(gesture)
-
+        gesture.connect("pressed", self.on_grid_right_click, child if 'child' in locals() else card)
+        card.add_controller(gesture)
+    
         lp = Gtk.GestureLongPress()
         lp.connect(
             "pressed",
-            lambda g, x, y, c=child: self.on_grid_right_click(g, 1, x, y, c),
+            lambda g, x, y, c=card: self.on_grid_right_click(g, 1, x, y, c),
         )
-        child.add_controller(lp)
-
-        return child
+        card.add_controller(lp)
+        return card
 
     def _render_items(self, items):
         for item in items:

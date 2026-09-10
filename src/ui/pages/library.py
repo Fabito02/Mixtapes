@@ -6,11 +6,10 @@ from api.client import MusicClient
 from ui.utils import show_toast
 from ui.context_menu import MenuAction, show_item_menu
 from ui.util_classes import ScrolledWindow
-
+from ui.widgets.media_card import MediaCardWidget
 
 LIBRARY_VIEW_MODES = ("list", "grid")
 DEFAULT_LIBRARY_VIEW_MODE = "grid"
-
 
 def _prefs_path():
     return os.path.join(GLib.get_user_data_dir(), "muse", "prefs.json")
@@ -64,79 +63,21 @@ def _make_flow_grid():
     return grid
 
 def _make_library_card(player, title, subtitle, thumb_url, fallback_icon, on_clicked=None, custom_icon=None):
-    from ui.utils import AsyncImage
-
-    child = Gtk.Button()
-    child.add_css_class("activatable")
-    child.add_css_class("library-card")
-    child.add_css_class("flat")
-    child.set_hexpand(False)
-    child.set_halign(Gtk.Align.START)
-
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-    child.set_child(box)
-
-    wrapper = Gtk.Box()
-    wrapper.set_overflow(Gtk.Overflow.HIDDEN)
-    wrapper.add_css_class("card-cover")
-    wrapper.set_halign(Gtk.Align.CENTER)
-    wrapper.set_valign(Gtk.Align.CENTER)
-
-    if custom_icon:
-        icon_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        icon_box.add_css_class("card-download-icon")
-        icon_box.set_valign(Gtk.Align.CENTER)
-        icon_box.set_halign(Gtk.Align.CENTER)
-        icon_box.set_hexpand(False)
-        icon_box.set_vexpand(False)
-
-        icon = Gtk.Image.new_from_icon_name(custom_icon)
-        icon.set_halign(Gtk.Align.CENTER)
-        icon.set_valign(Gtk.Align.CENTER)
-        icon.set_hexpand(True)
-        icon.set_vexpand(True)
-
-        icon_box.append(icon)
-        wrapper.append(icon_box)
-        img = None
-    else:
-        img = AsyncImage(url=thumb_url, width=150, height=150, player=player)
-        img.add_css_class("card-cover-img")
-        if not thumb_url and fallback_icon:
-            img.set_from_icon_name(fallback_icon)
-        wrapper.append(img)
-
-    box.append(wrapper)
-
-    title_label = Gtk.Label(label=title)
-    title_label.set_halign(Gtk.Align.START)
-    title_label.set_ellipsize(Pango.EllipsizeMode.END)
-    title_label.set_wrap(True)
-    title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-    title_label.set_lines(2)
-    title_label.set_justify(Gtk.Justification.LEFT)
-    title_label.set_tooltip_text(title)
-    title_clamp = Adw.Clamp()
-    title_clamp.set_child(title_label)
-    box.append(title_clamp)
-
-    if subtitle:
-        subtitle_label = Gtk.Label(label=subtitle)
-        subtitle_label.set_halign(Gtk.Align.START)
-        subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
-        subtitle_label.add_css_class("dim-label")
-        subtitle_label.add_css_class("caption")
-        subtitle_clamp = Adw.Clamp()
-        subtitle_clamp.set_child(subtitle_label)
-        box.append(subtitle_clamp)
-
-    child._cover_img = img
-    child._search_title = title
-
-    if on_clicked:
-        child.connect("clicked", lambda btn: on_clicked(btn))
-    return child
-
+    mock_item = {
+        "title": title,
+        "thumbnails": [{"url": thumb_url}] if thumb_url else []
+    }
+    card = MediaCardWidget(
+        mock_item,
+        player=player,
+        title_lines=2,
+        subtitle_text=subtitle,
+        custom_icon=custom_icon,
+        fallback_icon=fallback_icon,
+        on_clicked=lambda btn, it: on_clicked(btn) if on_clicked else None
+    )
+    card._search_title = title
+    return card
 
 class LibraryPage(Adw.Bin):
     def __init__(self, player, open_playlist_callback, *args, **kwargs):
