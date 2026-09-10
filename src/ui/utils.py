@@ -181,8 +181,8 @@ IMG_CACHE = collections.OrderedDict()
 # 1024px can pin ~256 MB by itself after playlist/queue browsing. Keep enough
 # warm artwork for the current view and nearby tracks without letting decoded
 # covers dominate the process footprint.
-MAX_CACHE_SIZE = 24
-MAX_CACHED_DIM = 768
+MAX_CACHE_SIZE = 12
+MAX_CACHED_DIM = 512
 IMG_CACHE_LOCK = threading.Lock()
 
 # Bounded executor for image fetches. Each row's `load_url` used to spawn a
@@ -209,11 +209,8 @@ def _get_fetch_executor():
     with _FETCH_EXECUTOR_LOCK:
         if _FETCH_EXECUTOR is None:
             from concurrent.futures import ThreadPoolExecutor
-            # Keep decode concurrency low: GdkPixbuf/PIL bursts can otherwise
-            # briefly allocate hundreds of MB while several covers decode and
-            # downscale at the same time.
             _FETCH_EXECUTOR = ThreadPoolExecutor(
-                max_workers=2, thread_name_prefix="muse-img"
+                max_workers=8, thread_name_prefix="muse-img"
             )
     return _FETCH_EXECUTOR
 
@@ -871,7 +868,6 @@ class AsyncImage(Gtk.Image):
         super().__init__(**kwargs)
         self.player = player
 
-        # Determine target dimensions
         self.target_w = width if width else size
         self.target_h = height if height else size
         self._is_placeholder = True
@@ -880,12 +876,11 @@ class AsyncImage(Gtk.Image):
             self.target_w = 48
         if not self.target_h:
             self.target_h = 48
+        self._active_future = None
 
-        # Set pixel size if provided (limits size for icons).
         if size:
             self.set_pixel_size(size)
         else:
-            # Rely on pixbuf scaling for explicit width/height.
             pass
 
         # Skip the placeholder icon-name lookup at init time — it's a
@@ -910,6 +905,13 @@ class AsyncImage(Gtk.Image):
 
     def cancel_and_unload(self):
         self._pending_fetch = None
+        if self._active_future:
+            try:
+                self._active_future.cancel()
+            except Exception:
+                pass
+            self._active_future = None
+
         if getattr(self, "_map_handler_id", None):
             try:
                 self.disconnect(self._map_handler_id)
@@ -917,7 +919,11 @@ class AsyncImage(Gtk.Image):
                 pass
             self._map_handler_id = None
 
-        self.clear()
+        if isinstance(self, Gtk.Picture):
+            self.set_paintable(None)
+        else:
+            self.clear()
+            
         self._is_placeholder = True
 
     def _on_unmap(self, widget):
@@ -971,8 +977,15 @@ class AsyncImage(Gtk.Image):
     # sees it. Defer the submit_fetch until the widget is mapped; cache
     # hits still paint synchronously so already-loaded rows are instant.
     def _queue_fetch(self, fn, *args):
+        if self._active_future:
+            try:
+                self._active_future.cancel()
+            except Exception:
+                pass
+            self._active_future = None
+
         if self.get_mapped():
-            submit_fetch(fn, *args)
+            self._active_future = submit_fetch(fn, *args)
             return
         self._pending_fetch = (fn, args)
         if not getattr(self, "_map_handler_id", None):
@@ -984,18 +997,19 @@ class AsyncImage(Gtk.Image):
             return
         fn, args = pending
         self._pending_fetch = None
-        # The first positional arg to _fetch_image is the URL it was queued
-        # for. If load_url has since pointed this widget at a different URL
-        # (recycled to a new track), drop the stale fetch.
         if args and args[0] != self.url:
             return
-        submit_fetch(fn, *args)
+        if self._active_future:
+            try:
+                self._active_future.cancel()
+            except Exception:
+                pass
+        self._active_future = submit_fetch(fn, *args)
 
     def load_url(self, url, **kwargs):
         orig_url = url
         url = get_high_res_url(url, self.target_w)
         self.url = url
-        # A new URL invalidates any previously deferred fetch.
         self._pending_fetch = None
 
         vid = getattr(self, 'video_id', None)
@@ -1102,8 +1116,8 @@ class AsyncImage(Gtk.Image):
                 # Now perform the widget-specific scaling and cropping in the background thread
                 # To support HiDPI (e.g. 200% scale), we double the target pixel density
                 # GTK will scale the texture back down smoothly, keeping it crisp.
-                tw = self.target_w * 2
-                th = self.target_h * 2
+                tw = self.target_w * 2 if self.target_w else 512
+                th = self.target_h * 2 if self.target_h else 512
 
                 w = pixbuf.get_width()
                 h = pixbuf.get_height()
@@ -1191,11 +1205,9 @@ class AsyncImage(Gtk.Image):
     def set_from_file(self, file):
         """Optimistically set image from a local file object (GFile)"""
         try:
-            # We must load into a pixbuf first to handle scaling correctly
             path = file.get_path()
-            # Multiplying by 2 to support HiDPI displays
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
-                path, self.target_w * 2, self.target_h * 2, True
+                path, self.target_w * 2 if self.target_w else 512, self.target_h * 2 if self.target_h else 512, True
             )
             print(f"[IMAGE-LOAD] AsyncImage path={path}")
             self.set_from_pixbuf(pixbuf)
@@ -1231,6 +1243,7 @@ class AsyncPicture(Gtk.Picture):
         self._map_handler_id = None
         self.connect("destroy", self._on_destroy)
         self.connect("unmap", self._on_unmap)
+        self._active_future = None
         
         if target_size:
             self.set_size_request(target_size, target_size)
@@ -1245,7 +1258,15 @@ class AsyncPicture(Gtk.Picture):
                 self.load_url(url)
 
     def cancel_and_unload(self):
+        """Cancela a Future ativa, limpa o fetch pendente e descarrega a textura."""
         self._pending_fetch = None
+        if self._active_future:
+            try:
+                self._active_future.cancel()
+            except Exception:
+                pass
+            self._active_future = None
+
         if getattr(self, "_map_handler_id", None):
             try:
                 self.disconnect(self._map_handler_id)
@@ -1253,7 +1274,11 @@ class AsyncPicture(Gtk.Picture):
                 pass
             self._map_handler_id = None
 
-        self.set_paintable(None)
+        if isinstance(self, Gtk.Picture):
+            self.set_paintable(None)
+        else:
+            self.clear()
+            
         self._is_placeholder = True
 
     def _on_unmap(self, widget):
@@ -1439,11 +1464,9 @@ class AsyncPicture(Gtk.Picture):
                 w = pixbuf.get_width()
                 h = pixbuf.get_height()
 
-                # Cache the high-res version BEFORE potential thumbnail downscaling
                 cache_pixbuf(url, pixbuf)
 
                 if target_size:
-                    # Scale to 2x for HiDPI quality (this is the widget-specific version)
                     tw = target_size * 2
                     th = target_size * 2
                     if w > tw or h > th:
