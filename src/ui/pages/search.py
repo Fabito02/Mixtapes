@@ -4,7 +4,73 @@ from api.client import MusicClient
 from ui.utils import AsyncPicture, LikeButton, parse_item_metadata, attach_playing_highlight
 from ui.context_menu import show_item_menu
 from ui.util_classes import ScrolledWindow
+from ui.widgets.scroll_box import HorizontalScrollBox
 
+def _is_video_thumbnail(item):
+    thumbs = item.get("thumbnails") or []
+    for t in thumbs:
+        url = (t.get("url") or "") if isinstance(t, dict) else ""
+        if "/vi/" in url or "/vi_webp/" in url:
+            return True
+    return False
+
+def _detect_kind(item, default_kind=None):
+    if not isinstance(item, dict):
+        return None
+
+    res_type = item.get("resultType")
+    if res_type == "video":
+        return "video"
+    if res_type == "song":
+        return "song"
+    if res_type == "artist":
+        return "artist"
+    if res_type in ("album", "single", "ep"):
+        return "album"
+    if res_type == "playlist":
+        return "playlist"
+
+    if item.get("videoId"):
+        vtype = (item.get("videoType") or "").upper()
+        if vtype:
+            if vtype == "MUSIC_VIDEO_TYPE_ATV":
+                return "song"
+            if "PODCAST" in vtype or "EPISODE" in vtype:
+                return None
+            return "video"
+        if _is_video_thumbnail(item):
+            return "video"
+        return "song"
+
+    if item.get("playlistId"):
+        return "playlist"
+    browse_id = item.get("browseId") or ""
+    if browse_id.startswith(("MPRE", "OLAK")):
+        return "album"
+    if browse_id.startswith(("UC", "FEmusic_library_privately_owned")):
+        return "artist"
+    if item.get("subscribers") is not None:
+        return "artist"
+    return default_kind
+
+def _kind_word(kind, item):
+    if kind == "album":
+        return item.get("type") or "Album"
+    return {
+        "song": "Song",
+        "video": "Video",
+        "playlist": "Playlist",
+        "artist": "Artist",
+    }.get(kind, "")
+
+def _kind_icon(kind):
+    return {
+        "song": "audio-x-generic-symbolic",
+        "video": "video-x-generic-symbolic",
+        "album": "media-optical-symbolic",
+        "playlist": "view-list-symbolic",
+        "artist": "avatar-default-symbolic",
+    }.get(kind)
 
 class SearchPage(Adw.Bin):
     def __init__(self, player, open_playlist_callback, *args, **kwargs):
@@ -18,23 +84,37 @@ class SearchPage(Adw.Bin):
         self.stack = Gtk.Stack()
         self.stack.set_vexpand(True)
 
+        results_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        self.toggle_group_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.toggle_group_container.set_halign(Gtk.Align.CENTER)
+        self.toggle_group_container.set_margin_top(16)
+        self.toggle_group_container.set_margin_bottom(8)
+        self.toggle_group_container.set_margin_start(12)
+        self.toggle_group_container.set_margin_end(12)
+
+        results_page.append(self.toggle_group_container)
+
+        self.results_stack = Gtk.Stack()
+        self.results_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+
+        self.results_stack.set_vhomogeneous(False)
+        self.results_stack.set_hhomogeneous(False)
+        self.results_stack.set_valign(Gtk.Align.START)
+
         results_scrolled = ScrolledWindow()
         results_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        results_scrolled.set_vexpand(True)
 
         results_clamp = Adw.Clamp()
         results_clamp.set_maximum_size(1024)
         results_clamp.set_tightening_threshold(600)
+        results_clamp.set_child(self.results_stack)
 
-        self.results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
-        self.results_box.set_margin_top(24)
-        self.results_box.set_margin_bottom(24)
-        self.results_box.set_margin_start(12)
-        self.results_box.set_margin_end(12)
-
-        results_clamp.set_child(self.results_box)
         results_scrolled.set_child(results_clamp)
+        results_page.append(results_scrolled)
 
-        self.stack.add_named(results_scrolled, "results")
+        self.stack.add_named(results_page, "results")
 
         loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         loading_box.set_valign(Gtk.Align.CENTER)
@@ -81,32 +161,95 @@ class SearchPage(Adw.Bin):
         self._explore_loading = False
         self._explore_retry_count = 0
 
-
         GLib.idle_add(self.load_explore_data)
 
         self.loading_row_spinner = None
         self.player.connect("state-changed", self.on_player_state_changed)
 
+        self.connect("notify::visible", self._on_page_visible_changed)
+        self.connect("map", self._on_page_mapped)
+
+    def _build_kind_subtitle(self, item, kind, subtitle_text="", dim=True):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row.set_halign(Gtk.Align.START)
+
+        icon_name = _kind_icon(kind)
+        if icon_name:
+            icon = Gtk.Image.new_from_icon_name(icon_name)
+            icon.set_pixel_size(12)
+            icon.set_valign(Gtk.Align.CENTER)
+            if dim:
+                icon.add_css_class("dim-label")
+            row.append(icon)
+
+        parts = []
+        kw = _kind_word(kind, item)
+        if kw:
+            parts.append(kw)
+        if subtitle_text:
+            parts.append(subtitle_text)
+
+        text = " • ".join(parts) if parts else ""
+
+        label = Gtk.Label(label=text)
+        label.set_halign(Gtk.Align.START)
+        label.set_ellipsize(Pango.EllipsizeMode.END)
+        label.set_lines(1)
+        label.add_css_class("caption")
+        if dim:
+            label.add_css_class("dim-label")
+        row.append(label)
+
+        row._label = label
+        row._kind = kind
+        row._item = item
+        return row
+
+    def _on_page_visible_changed(self, widget, pspec):
+        if self.get_visible():
+            self._check_and_reset_if_empty()
+
+    def _on_page_mapped(self, widget):
+        self._check_and_reset_if_empty()
+
+    def _check_and_reset_if_empty(self):
+        entry = getattr(self, "search_entry", None)
+        text = ""
+        if entry and hasattr(entry, "get_text"):
+            text = entry.get_text().strip()
+        else:
+            root = self.get_root()
+            if root and hasattr(root, "search_entry"):
+                text = root.search_entry.get_text().strip()
+
+        if not text:
+            if self.search_timer:
+                GObject.source_remove(self.search_timer)
+                self.search_timer = None
+            self.stack.set_visible_child_name("explore")
+            if not self._explore_loaded:
+                self.load_explore_data()
+
     def set_compact_mode(self, compact):
         self._compact = compact
         if compact:
             self.add_css_class("compact")
-            self.results_box.set_spacing(16)
             self.explore_box.set_spacing(16)
+            child = self.results_stack.get_first_child()
+            while child:
+                child.set_spacing(16)
+                child = child.get_next_sibling()
         else:
             self.remove_css_class("compact")
-            self.results_box.set_spacing(24)
             self.explore_box.set_spacing(24)
+            child = self.results_stack.get_first_child()
+            while child:
+                child.set_spacing(24)
+                child = child.get_next_sibling()
 
-        # Update song row images on both the search-results pane and the
-        # explore pane. Previously only results_box was walked, so the
-        # trending/top-song rows on Explore kept their 56px thumbnails
-        # in compact mode.
-        self._propagate_compact(self.results_box, compact)
+        self._propagate_compact(self.results_stack, compact)
         self._propagate_compact(self.explore_box, compact)
 
-        # Only fetch if explore hasn't loaded yet; otherwise just keep
-        # the existing content (spacing was updated above).
         if not self._explore_loaded:
             self.load_explore_data()
 
@@ -120,18 +263,10 @@ class SearchPage(Adw.Bin):
             child = child.get_next_sibling()
 
     def on_key_pressed(self, controller, keyval, keycode, state):
-        # If user types and entry is not focused, focus it
-        # We ignore modifier keys to avoid grabbing shortcuts
-        # We permit normal typing
-        if not self.search_entry.is_focus():
-            # Basic check to see if it's a printable character or backspace
-            # We want to allow the event to propagate so the entry handles it
-            # Focus the search entry to allow typing. Forwarding the event handles the first character.
-
+        if hasattr(self, "search_entry") and not self.search_entry.is_focus():
             if keyval < 65000:
                 self.search_entry.grab_focus()
                 return controller.forward(self.search_entry)
-
         return False
 
     def _retry_explore_fetch(self):
@@ -195,11 +330,7 @@ class SearchPage(Adw.Bin):
         if not is_online():
             GObject.idle_add(self.update_explore_ui, None)
             return
-        # Three independent HTTP calls — fire in parallel. ``explore`` is
-        # required (the page can't render without it); ``categories`` and
-        # ``charts`` are optional enrichment that get merged in. We run
-        # the optional ones on side threads while the main thread waits
-        # for the explore call, then join.
+
         country = getattr(self, "_charts_country", "ZZ")
         results = {"categories": None, "charts": None}
 
@@ -227,8 +358,6 @@ class SearchPage(Adw.Bin):
             GObject.idle_add(self.update_explore_ui, None)
             return
 
-        # Wait for the side fetches before rendering so the page lays
-        # out once with everything in place instead of re-flowing.
         cat_t.join()
         ch_t.join()
         if results["categories"]:
@@ -240,10 +369,8 @@ class SearchPage(Adw.Bin):
     def update_explore_ui(self, data):
         self._explore_loading = False
         if not data:
-            # Check if offline
             from ui.utils import is_online
-            online = is_online()
-            if not online:
+            if not is_online():
                 child = self.explore_box.get_first_child()
                 while child:
                     next_child = child.get_next_sibling()
@@ -266,8 +393,6 @@ class SearchPage(Adw.Bin):
                 offline_box.append(offline_sub)
                 self.explore_box.append(offline_box)
                 return
-            # Online but fetch failed/empty: retry a few times with backoff,
-            # then fall back to a manual retry placeholder.
             if self._explore_retry_count < 3:
                 self._explore_retry_count += 1
                 delay = 1500 * self._explore_retry_count
@@ -276,7 +401,6 @@ class SearchPage(Adw.Bin):
                 self._show_explore_retry_placeholder()
             return
 
-        # Clear existing explore content
         child = self.explore_box.get_first_child()
         while child:
             next_child = child.get_next_sibling()
@@ -286,47 +410,30 @@ class SearchPage(Adw.Bin):
         self._explore_loaded = True
         self._explore_retry_count = 0
 
-        # Separated categories (Moods and Genres)
         if "separated_categories" in data:
             cats = data["separated_categories"]
             moods = cats.get("Moods & moments", [])
             genres = cats.get("Genres", [])
-            
+
             if moods:
-                self.add_horizontal_section(
-                    self.explore_box, "Moods & Moments", moods, is_category=True
-                )
-            
+                self.add_horizontal_section(self.explore_box, "Moods & Moments", moods, is_category=True)
+
             if genres:
                 for g in genres:
                     g["is_genre"] = True
-                self.add_horizontal_section(
-                    self.explore_box, "Genres", genres, is_category=True
-                )
+                self.add_horizontal_section(self.explore_box, "Genres", genres, is_category=True)
         elif "moods_and_genres" in data and isinstance(data["moods_and_genres"], list):
-            self.add_horizontal_section(
-                self.explore_box, "Moods & Genres", data["moods_and_genres"], is_category=True
-            )
+            self.add_horizontal_section(self.explore_box, "Moods & Genres", data["moods_and_genres"], is_category=True)
 
-        # New Releases (Albums/Singles)
         if "new_releases" in data and isinstance(data["new_releases"], list):
-            self.add_section(
-                self.explore_box, "New Albums & Singles", data["new_releases"][:10]
-            )
+            self.add_section(self.explore_box, "New Albums & Singles", data["new_releases"][:10])
 
-        # New Music Videos
         if "new_videos" in data and isinstance(data["new_videos"], list):
-            self.add_section(
-                self.explore_box, "New Music Videos", data["new_videos"][:5]
-            )
+            self.add_section(self.explore_box, "New Music Videos", data["new_videos"][:5])
 
-        # Trending
         if "trending" in data and data["trending"] and "items" in data["trending"]:
-            self.add_section(
-                self.explore_box, "Trending", data["trending"]["items"][:5]
-            )
+            self.add_section(self.explore_box, "Trending", data["trending"]["items"][:5])
 
-        # Charts
         charts = data.get("_charts")
         if charts:
             self._add_charts_sections(charts)
@@ -343,12 +450,10 @@ class SearchPage(Adw.Bin):
         label.set_halign(Gtk.Align.START)
         section_box.append(label)
 
-        from ui.widgets.scroll_box import HorizontalScrollBox
         scroll_box = HorizontalScrollBox()
-
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         h_box.set_margin_bottom(12)
-        
+
         display_items = items
         if is_category:
             display_items = items[:20]
@@ -375,9 +480,6 @@ class SearchPage(Adw.Bin):
         section_box.append(scroll_box)
 
     def _add_charts_sections(self, charts):
-        """Add charts sections: country selector, trending playlists, genre charts, top artists."""
-
-        # ── Country selector + Charts header ──
         charts_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
 
         charts_label = Gtk.Label(label="Charts")
@@ -389,12 +491,10 @@ class SearchPage(Adw.Bin):
         spacer.set_hexpand(True)
         charts_header.append(spacer)
 
-        # Country dropdown
         countries = charts.get("countries", {})
         options = countries.get("options", [])
 
         if options:
-            # Map country codes to display names
             _COUNTRY_NAMES = {
                 "ZZ": "Global", "AR": "Argentina", "AU": "Australia", "AT": "Austria",
                 "BE": "Belgium", "BO": "Bolivia", "BR": "Brazil", "CA": "Canada",
@@ -415,7 +515,6 @@ class SearchPage(Adw.Bin):
                 "UY": "Uruguay", "VE": "Venezuela", "VN": "Vietnam", "ZW": "Zimbabwe",
             }
             display_names = [_COUNTRY_NAMES.get(c, c) for c in options]
-            # Sort by display name but keep Global first
             paired = list(zip(display_names, options))
             paired.sort(key=lambda x: ("" if x[1] == "ZZ" else x[0]))
             display_names = [p[0] for p in paired]
@@ -436,24 +535,19 @@ class SearchPage(Adw.Bin):
 
         self.explore_box.append(charts_header)
 
-        # ── Trending playlists (horizontal scroll) ──
         videos = charts.get("videos", [])
         if videos:
             self._add_chart_playlists("Trending", videos)
 
-        # ── Genre charts (horizontal scroll of pills) ──
         genres = charts.get("genres", [])
         if genres:
             self._add_chart_playlists("Genre Charts", genres)
 
-        # ── Top Artists (ranked list) ──
         artists = charts.get("artists", [])
         if artists:
             self._add_chart_artists("Top Artists", artists)
 
     def _make_chart_card(self, item, on_clicked=None):
-        from ui.utils import AsyncImage
-
         child = Gtk.Button()
         child.add_css_class("activatable")
         child.add_css_class("artist-horizontal-item")
@@ -466,7 +560,7 @@ class SearchPage(Adw.Bin):
         thumbnails = item.get("thumbnails", [])
         thumb_url = thumbnails[-1].get("url") if thumbnails else None
 
-        img = AsyncImage(url=thumb_url, size=150, player=self.player)
+        img = AsyncPicture(url=thumb_url, target_size=150, player=self.player)
         if not thumb_url:
             img.set_from_icon_name("media-playlist-audio-symbolic")
 
@@ -492,16 +586,12 @@ class SearchPage(Adw.Bin):
         box.append(title_clamp)
 
         subtitle = item.get("subtitle") or item.get("description")
-        if subtitle:
-            subtitle_label = Gtk.Label(label=subtitle)
-            subtitle_label.set_halign(Gtk.Align.START)
-            subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
-            subtitle_label.add_css_class("dim-label")
-            subtitle_label.add_css_class("caption")
+        kind = _detect_kind(item, default_kind="video" if "video" in str(item.get("type", "")).lower() else "playlist")
+        sub_widget = self._build_kind_subtitle(item, kind, subtitle_text=subtitle or "", dim=True)
 
-            subtitle_clamp = Adw.Clamp()
-            subtitle_clamp.set_child(subtitle_label)
-            box.append(subtitle_clamp)
+        subtitle_clamp = Adw.Clamp()
+        subtitle_clamp.set_child(sub_widget)
+        box.append(subtitle_clamp)
 
         child._cover_img = img
 
@@ -511,7 +601,6 @@ class SearchPage(Adw.Bin):
         return child
 
     def _add_chart_playlists(self, title, items):
-        """Add a horizontal scroll section of chart playlist cards."""
         section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.explore_box.append(section_box)
 
@@ -520,9 +609,7 @@ class SearchPage(Adw.Bin):
         label.set_halign(Gtk.Align.START)
         section_box.append(label)
 
-        from ui.widgets.scroll_box import HorizontalScrollBox
         scroll_box = HorizontalScrollBox()
-
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         h_box.set_margin_bottom(8)
 
@@ -543,9 +630,6 @@ class SearchPage(Adw.Bin):
             self._on_chart_playlist_clicked(item)
 
     def _add_chart_artists(self, title, artists):
-        """Add a ranked list of chart artists."""
-        from ui.utils import AsyncPicture
-
         section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.explore_box.append(section_box)
 
@@ -559,14 +643,12 @@ class SearchPage(Adw.Bin):
         list_box.set_selection_mode(Gtk.SelectionMode.NONE)
         list_box.connect("row-activated", self._on_chart_artist_activated)
 
-        # Show top 20
         for artist in artists[:20]:
             row = Gtk.ListBoxRow()
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("song-row")
             row.set_child(box)
 
-            # Rank number
             rank = artist.get("rank", "")
             rank_label = Gtk.Label(label=str(rank))
             rank_label.set_width_chars(3)
@@ -574,7 +656,6 @@ class SearchPage(Adw.Bin):
             rank_label.set_valign(Gtk.Align.CENTER)
             box.append(rank_label)
 
-            # Trend indicator
             trend = artist.get("trend", "neutral")
             if trend == "up":
                 trend_icon = Gtk.Image.new_from_icon_name("go-up-symbolic")
@@ -589,7 +670,6 @@ class SearchPage(Adw.Bin):
             trend_icon.set_pixel_size(12)
             box.append(trend_icon)
 
-            # Thumbnail
             thumb_url = artist.get("thumbnails", [{}])[-1].get("url") if artist.get("thumbnails") else None
             img = AsyncPicture(
                 url=thumb_url, target_size=56, crop_to_square=True, player=self.player,
@@ -601,7 +681,6 @@ class SearchPage(Adw.Bin):
                 img.set_from_icon_name("avatar-default-symbolic")
             box.append(img)
 
-            # Name + subscribers
             vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             vbox.set_valign(Gtk.Align.CENTER)
             vbox.set_hexpand(True)
@@ -694,7 +773,6 @@ class SearchPage(Adw.Bin):
         if hasattr(root, "open_all_moods"):
             root.open_all_moods(items, title)
 
-
     def on_grid_button_clicked(self, button):
         if hasattr(button, "item_data"):
             data = button.item_data
@@ -708,7 +786,6 @@ class SearchPage(Adw.Bin):
         if not items:
             return
 
-        # Wrap label and listbox in a box to control spacing
         section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         parent_box.append(section_box)
 
@@ -727,38 +804,24 @@ class SearchPage(Adw.Bin):
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("song-row")
             row.set_child(box)
-            # Highlight the row while its track is playing — Explore
-            # rows don't use SongRowWidget so they need an explicit
-            # subscription.
+
             if item.get("videoId"):
                 attach_playing_highlight(box, self.player, item["videoId"])
 
-            # Subtitle
             subtitle = ""
 
-            # Special handling for Artist results to avoid redundant name
             if item.get("resultType") == "artist":
-                if "subscribers" in item and item.get("subscribers"):
-                    count = item.get("subscribers", "")
-                    if (
-                        count
-                        and count[-1].isdigit() is False
-                        and "listeners" not in count
-                        and "subscribers" not in count
-                    ):
-                        subtitle = f"{count} monthly listeners"
-                    else:
-                        subtitle = count
-                if not subtitle:
-                    subtitle = "Artist"
+                count = item.get("subscribers", "")
+                if count and not count[-1].isdigit() and "listeners" not in count and "subscribers" not in count:
+                    subtitle = f"{count} monthly listeners"
+                elif count:
+                    subtitle = count
             elif item.get("artists"):
                 artists = item["artists"]
                 if artists:
                     subtitle = ", ".join([a.get("name", "") for a in artists if isinstance(a, dict)])
                     if not subtitle:
-                        # Artists might be plain strings
                         subtitle = ", ".join([str(a) for a in artists if a])
-                # Fallback to author field
                 if not subtitle and "author" in item:
                     author = item.get("author")
                     if isinstance(author, list):
@@ -768,7 +831,6 @@ class SearchPage(Adw.Bin):
                     elif author:
                         subtitle = str(author)
 
-                # Append album name if available
                 album_data = item.get("album")
                 if album_data:
                     album_name = album_data.get("name", "") if isinstance(album_data, dict) else str(album_data)
@@ -776,22 +838,12 @@ class SearchPage(Adw.Bin):
                         subtitle += f" • {album_name}"
                     elif album_name:
                         subtitle = album_name
-
-                # Check for Album type
-                if "type" in item and subtitle:
-                    subtitle += f" • {item['type']}"
-                elif "type" in item:
-                    subtitle = item["type"]
             elif "subscribers" in item:
                 subtitle = item.get("subscribers", "")
             elif "itemCount" in item and item["itemCount"]:
                 count = str(item["itemCount"])
-                if "songs" not in count:
-                    subtitle = f"{count} views"
-                else:
-                    subtitle = count
+                subtitle = count if "songs" in count else f"{count} views"
 
-            # Cover Art
             thumbnails = item.get("thumbnails", [])
             thumb_url = thumbnails[-1]["url"] if thumbnails else None
 
@@ -819,25 +871,19 @@ class SearchPage(Adw.Bin):
             title_label.set_ellipsize(Pango.EllipsizeMode.END)
             title_label.set_lines(1)
 
-            subtitle_label = Gtk.Label(label=subtitle or "")
-            subtitle_label.set_halign(Gtk.Align.START)
-            subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
-            subtitle_label.set_lines(1)
-            subtitle_label.add_css_class("dim-label")
-            subtitle_label.add_css_class("caption")
-            subtitle_label.set_visible(bool(subtitle))
+            kind = _detect_kind(item)
+            sub_row = self._build_kind_subtitle(item, kind, subtitle_text=subtitle, dim=True)
+            subtitle_label = sub_row._label
 
-            # Fetch missing artist info in background for albums with empty artists
             if not subtitle:
                 browse_id = item.get("browseId") or ""
                 audio_pid = item.get("audioPlaylistId") or ""
                 album_id = browse_id if browse_id.startswith("MPRE") else None
                 if not album_id and audio_pid.startswith("OLAK"):
-                    # Convert OLAK to browse ID via API
                     album_id = audio_pid
                 if album_id:
                     item_type = item.get("type", "")
-                    def _fetch_artist_info(aid, itype, lbl, client):
+                    def _fetch_artist_info(aid, itype, lbl, k, itm, client):
                         try:
                             if aid.startswith("OLAK"):
                                 bid = client.get_album_browse_id(aid)
@@ -850,21 +896,21 @@ class SearchPage(Adw.Bin):
                                 if itype:
                                     text = f"{text} • {itype}" if text else itype
                                 if text:
-                                    GLib.idle_add(lbl.set_label, text)
-                                    GLib.idle_add(lbl.set_visible, True)
+                                    kw = _kind_word(k, itm)
+                                    final_txt = f"{kw} • {text}" if kw else text
+                                    GLib.idle_add(lbl.set_label, final_txt)
                         except Exception:
                             pass
                     threading.Thread(
                         target=_fetch_artist_info,
-                        args=(album_id, item_type, subtitle_label, self.client),
+                        args=(album_id, item_type, subtitle_label, kind, item, self.client),
                         daemon=True,
                     ).start()
 
-            # Fetch missing album name in background for songs
             vid_for_album = item.get("videoId")
             has_album = item.get("album")
             if vid_for_album and not has_album and item.get("resultType") in ("song", "video", None):
-                def _fetch_album(vid, itm, lbl, client):
+                def _fetch_album(vid, itm, lbl, k, client):
                     try:
                         wp = client.get_watch_playlist(video_id=vid, limit=1)
                         wp_tracks = wp.get("tracks", [])
@@ -878,21 +924,20 @@ class SearchPage(Adw.Bin):
                                     if cur:
                                         lbl.set_label(f"{cur} • {album_name}")
                                     else:
-                                        lbl.set_label(album_name)
-                                    lbl.set_visible(True)
+                                        kw = _kind_word(k, itm)
+                                        lbl.set_label(f"{kw} • {album_name}" if kw else album_name)
                                 GLib.idle_add(_update_label)
                     except Exception:
                         pass
                 threading.Thread(
                     target=_fetch_album,
-                    args=(vid_for_album, item, subtitle_label, self.client),
+                    args=(vid_for_album, item, subtitle_label, kind, self.client),
                     daemon=True,
                 ).start()
 
             title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             title_box.append(title_label)
 
-            # Explicit Badge
             meta = parse_item_metadata(item)
             if meta["is_explicit"]:
                 explicit_badge = Gtk.Label(label="E")
@@ -901,10 +946,9 @@ class SearchPage(Adw.Bin):
                 title_box.append(explicit_badge)
 
             vbox.append(title_box)
-            vbox.append(subtitle_label)
+            vbox.append(sub_row)
             box.append(vbox)
 
-            # Like Button
             if item.get("videoId"):
                 like_btn = LikeButton(
                     self.client, item["videoId"], item.get("likeStatus", "INDIFFERENT")
@@ -915,13 +959,11 @@ class SearchPage(Adw.Bin):
             row.item_data = item
             row.set_activatable(True)
 
-            # Context Menu (Right Click)
             gesture = Gtk.GestureClick()
-            gesture.set_button(3)  # Right click
+            gesture.set_button(3)
             gesture.connect("released", self.on_row_right_click, row)
             row.add_controller(gesture)
 
-            # Long Press for touch
             lp = Gtk.GestureLongPress()
             lp.connect(
                 "pressed", lambda g, x, y, r=row: self.on_row_right_click(g, 1, x, y, r)
@@ -932,26 +974,29 @@ class SearchPage(Adw.Bin):
 
         section_box.append(list_box)
 
+    def on_search_changed(self, entry):
+        text = entry.get_text() if hasattr(entry, "get_text") else str(entry)
+        self.on_external_search(text)
+
     def on_external_search(self, text):
         if self.search_timer:
             GObject.source_remove(self.search_timer)
+            self.search_timer = None
+
+        text = (text or "").strip()
+
+        if len(text) == 0:
+            self.stack.set_visible_child_name("explore")
+            if not self._explore_loaded:
+                self.load_explore_data()
+            return
 
         if len(text) > 2:
             self.search_timer = GObject.timeout_add(600, self.perform_search, text)
-        elif len(text) == 0:
-            self.stack.set_visible_child_name("explore")
-
-    def on_search_changed(self, entry):
-        # Deprecated local handler
-        pass
 
     def perform_search(self, query):
         self.search_timer = None
-
-        # Show loading
         self.stack.set_visible_child_name("loading")
-        # self.spinner.start()
-
         thread = threading.Thread(target=self._search_thread, args=(query,))
         thread.daemon = True
         thread.start()
@@ -959,16 +1004,57 @@ class SearchPage(Adw.Bin):
 
     def _search_thread(self, query):
         from ui.utils import is_online
+        import concurrent.futures
+
         if is_online():
-            results = self.client.search(query)
-            GObject.idle_add(self.update_results, results)
+            try:
+                results = self.client.search(query)
+            except Exception:
+                results = []
+
+            def fetch_filter(f):
+                try:
+                    return self.client.search(query, filter=f)
+                except Exception:
+                    return []
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                f_songs = executor.submit(fetch_filter, "songs")
+                f_artists = executor.submit(fetch_filter, "artists")
+                f_playlists = executor.submit(fetch_filter, "playlists")
+                f_albums = executor.submit(fetch_filter, "albums")
+
+                more_songs = f_songs.result()
+                more_artists = f_artists.result()
+                more_playlists = f_playlists.result()
+                more_albums = f_albums.result()
+
+            seen = set()
+            merged_results = []
+
+            def add_items(items):
+                if not items:
+                    return
+                for item in items:
+                    vid = item.get("videoId") or item.get("browseId") or item.get("playlistId")
+                    if vid:
+                        if vid in seen:
+                            continue
+                        seen.add(vid)
+                    merged_results.append(item)
+
+            add_items(results)
+            add_items(more_songs)
+            add_items(more_artists)
+            add_items(more_playlists)
+            add_items(more_albums)
+
+            GObject.idle_add(self.update_results, merged_results)
         else:
-            # Offline: search local downloads
             results = self._search_local(query)
             GObject.idle_add(self.update_results, results)
 
     def _search_local(self, query):
-        """Search downloaded songs in the local database."""
         from player.downloads import get_download_db
         db = get_download_db()
         all_downloads = db.get_all_downloads()
@@ -991,45 +1077,48 @@ class SearchPage(Adw.Bin):
                 })
         return results
 
+    def _on_toggle_changed(self, toggle_group, param):
+        selected_name = toggle_group.get_active_name()
+        if selected_name and self.results_stack.get_child_by_name(selected_name):
+            self.results_stack.set_visible_child_name(selected_name)
+
     def update_results(self, results):
-        # self.spinner.stop()
         self.stack.set_visible_child_name("results")
 
-        # Clear existing results
-        # Removing children from Box
-        child = self.results_box.get_first_child()
-        while child:
-            next_child = child.get_next_sibling()
-            self.results_box.remove(child)
-            child = next_child
+        while child := self.results_stack.get_first_child():
+            self.results_stack.remove(child)
+
+        while child := self.toggle_group_container.get_first_child():
+            self.toggle_group_container.remove(child)
 
         if not results:
             return
 
-        # Group Results
+        self.results_toggle_group = Adw.ToggleGroup()
+        self.results_toggle_group.add_css_class("round")
+        self.toggle_group_container.append(self.results_toggle_group)
+
         top_result = None
         artists = []
         songs = []
         albums = []
         videos = []
         playlists = []
+        others = []
 
         for r in results:
-            # Normalize title for artists
             if "title" not in r:
                 if "artist" in r:
                     r["title"] = r["artist"]
                 elif "artists" in r and r["artists"]:
                     r["title"] = r["artists"][0]["name"]
 
-            # Normalize browseId for Top Result (Artist)
             if "browseId" not in r and "artists" in r and r["artists"]:
                 r["browseId"] = r["artists"][0]["id"]
 
             r_type = r.get("resultType")
             category = r.get("category")
 
-            # Extract Top Result
             if category == "Top result" and not top_result:
                 top_result = r
                 continue
@@ -1040,33 +1129,81 @@ class SearchPage(Adw.Bin):
                 songs.append(r)
             elif r_type == "album":
                 albums.append(r)
+                others.append(r)
             elif r_type == "video":
                 videos.append(r)
+                others.append(r)
             elif r_type == "playlist" or category == "Community playlists":
                 playlists.append(r)
+            else:
+                others.append(r)
 
-        # Display Top Result first
+        first_page_id = None
+
+        def create_tab(name, page_id):
+            nonlocal first_page_id
+            page_box = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=16 if getattr(self, "_compact", False) else 24
+            )
+            page_box.set_margin_top(16)
+            page_box.set_margin_bottom(24)
+            page_box.set_margin_start(12)
+            page_box.set_margin_end(12)
+
+            self.results_stack.add_named(page_box, page_id)
+
+            toggle = Adw.Toggle(label=name, name=page_id)
+            self.results_toggle_group.add(toggle)
+
+            if first_page_id is None:
+                first_page_id = page_id
+
+            return page_box
+
+        main_tab = create_tab("Main", "main")
         if top_result:
-            self.add_section(self.results_box, "Top Result", [top_result])
+            self.add_section(main_tab, "Top Result", [top_result])
 
-        # Allow user specified order: Artists > Songs > Albums > Videos > Playlists
-        self.add_section(self.results_box, "Artists", artists)
-        self.add_section(self.results_box, "Songs", songs)
-        self.add_section(self.results_box, "Albums", albums)
-        self.add_section(self.results_box, "Videos", videos)
-        self.add_section(self.results_box, "Community Playlists", playlists)
+        relevant = [r for r in results if r != top_result]
+        if relevant:
+            self.add_section(main_tab, "Relevant Results", relevant)
+
+        if songs:
+            songs_tab = create_tab("Songs", "songs")
+            self.add_section(songs_tab, "Songs", songs)
+
+        if artists:
+            artists_tab = create_tab("Artists", "artists")
+            self.add_section(artists_tab, "Artists", artists)
+
+        if playlists:
+            playlists_tab = create_tab("Community Playlists", "playlists")
+            self.add_section(playlists_tab, "Playlists", playlists)
+
+        if others:
+            others_tab = create_tab("Other results", "others")
+            if albums:
+                self.add_section(others_tab, "Albums", albums)
+            if videos:
+                self.add_section(others_tab, "Videos", videos)
+            rem = [o for o in others if o not in albums and o not in videos]
+            if rem:
+                self.add_section(others_tab, "More results", rem)
+
+        self.results_toggle_group.connect("notify::active-name", self._on_toggle_changed)
+
+        if first_page_id:
+            self.results_toggle_group.set_active_name(first_page_id)
+            self.results_stack.set_visible_child_name(first_page_id)
+
+        if getattr(self, "_compact", False):
+            self._propagate_compact(self.results_stack, True)
 
     def on_player_state_changed(self, player, state):
         if state == "playing" or state == "rec-started":
-            # We need to find the row with the spinner and remove it.
-            # Iterating through list box children is one way.
-            # Or just keep a reference.
             if hasattr(self, "loading_row_spinner") and self.loading_row_spinner:
-                # Remove suffix? AdwActionRow.remove(widget) works if it's a child.
-                # Suffixes are children.
                 try:
-                    # We need the parent row of the spinner?
-                    # or just: row.remove(spinner)
                     parent = self.loading_row_spinner.get_parent()
                     if parent:
                         parent.remove(self.loading_row_spinner)
@@ -1082,15 +1219,9 @@ class SearchPage(Adw.Bin):
 
             initial_data = {
                 "title": data.get("title"),
-                "thumb": data["thumbnails"][-1]["url"]
-                if data.get("thumbnails")
-                else None,
-                "author": data.get("runs", [{}])[0].get("text")
-                if "runs" in data
-                else None,  # basic guess
+                "thumb": data["thumbnails"][-1]["url"] if data.get("thumbnails") else None,
+                "author": data.get("runs", [{}])[0].get("text") if "runs" in data else None,
             }
-            # For search results, author might be in subtitle or runs.
-            # Pass title and thumb for immediate visual feedback.
 
             self.open_playlist_callback(data["browseId"], initial_data)
 
@@ -1099,36 +1230,25 @@ class SearchPage(Adw.Bin):
             title = data.get("title", "Unknown")
             res_type = data.get("resultType")
 
-            # Helper to open playlist/album
             def open_pid(pid):
                 initial_data = {
                     "title": title,
-                    "thumb": data["thumbnails"][-1]["url"]
-                    if data.get("thumbnails")
-                    else None,
-                    "author": ", ".join(
-                        [a.get("name", "") for a in data.get("artists", [])]
-                    )
-                    if "artists" in data
-                    else data.get("count", ""),
+                    "thumb": data["thumbnails"][-1]["url"] if data.get("thumbnails") else None,
+                    "author": ", ".join([a.get("name", "") for a in data.get("artists", [])]) if "artists" in data else data.get("count", ""),
                 }
                 self.open_playlist_callback(pid, initial_data)
 
-            # 1. Check resultType first (Robust for Search Results)
             if res_type in ["song", "video"]:
                 if "videoId" in data:
-                    # Build queue from the listbox (siblings)
                     queue_tracks = []
                     start_index = 0
 
-                    # listbox is passed as argument
                     child = listbox.get_first_child()
                     idx = 0
                     while child:
                         if hasattr(child, "item_data"):
                             s_data = child.item_data
                             if "videoId" in s_data:
-                                # Normalize
                                 s_title = s_data.get("title", "Unknown")
 
                                 s_thumb = ""
@@ -1137,9 +1257,7 @@ class SearchPage(Adw.Bin):
 
                                 s_artist = ""
                                 if "artists" in s_data:
-                                    s_artist = ", ".join(
-                                        [a.get("name", "") for a in s_data["artists"]]
-                                    )
+                                    s_artist = ", ".join([a.get("name", "") for a in s_data["artists"]])
                                 elif "artist" in s_data:
                                     s_artist = s_data["artist"]
 
@@ -1162,31 +1280,17 @@ class SearchPage(Adw.Bin):
                     if queue_tracks:
                         self.player.set_queue(queue_tracks, start_index)
                     else:
-                        # Fallback to single (shouldn't happen if we are here)
-                        thumb_url = (
-                            data.get("thumbnails", [])[-1]["url"]
-                            if data.get("thumbnails")
-                            else None
-                        )
-                        artist_name = (
-                            ", ".join(
-                                [a.get("name", "") for a in data.get("artists", [])]
-                            )
-                            if "artists" in data
-                            else data.get("artist", "")
-                        )
-                        self.player.load_video(
-                            data["videoId"], title, artist_name, thumb_url
-                        )
+                        thumb_url = data.get("thumbnails", [])[-1]["url"] if data.get("thumbnails") else None
+                        artist_name = ", ".join([a.get("name", "") for a in data.get("artists", [])]) if "artists" in data else data.get("artist", "")
+                        self.player.load_video(data["videoId"], title, artist_name, thumb_url)
                     return
 
             elif res_type in ["album", "single", "ep"]:
-                # Prefer browseId (MPRE) or audioPlaylistId (OLAK)
                 if "browseId" in data and data["browseId"].startswith("MPRE"):
                     open_pid(data["browseId"])
                     return
                 elif "audioPlaylistId" in data:
-                    open_pid(data["audioPlaylistId"])  # conversion will handle it
+                    open_pid(data["audioPlaylistId"])
                     return
                 elif "browseId" in data:
                     open_pid(data["browseId"])
@@ -1200,14 +1304,7 @@ class SearchPage(Adw.Bin):
                     open_pid(data["browseId"])
                     return
 
-            # 2. Fallback to Key-Based logic (for items without explicit resultType)
-            if "videoId" in data and res_type not in [
-                "album",
-                "single",
-                "ep",
-                "playlist",
-                "artist",
-            ]:
+            if "videoId" in data and res_type not in ["album", "single", "ep", "playlist", "artist"]:
                 thumb_url = ""
                 thumbnails = data.get("thumbnails", [])
                 if thumbnails:
@@ -1226,19 +1323,13 @@ class SearchPage(Adw.Bin):
             elif "playlistId" in data:
                 open_pid(data["playlistId"])
             elif "browseId" in data:
-                # Check if it's a playlist or artist
-                if res_type in ["playlist", "album"] or data["browseId"].startswith(
-                    ("VL", "PL", "RD", "OL", "MPRE")
-                ):
+                if res_type in ["playlist", "album"] or data["browseId"].startswith(("VL", "PL", "RD", "OL", "MPRE")):
                     open_pid(data["browseId"])
                 else:
-                    print(f"Open BrowseID (Artist?): {data['browseId']}")
-                    # Check if we can navigate
                     root = self.get_root()
-                    if hasattr(root, "open_artist"):
+                    if root and hasattr(root, "open_artist"):
                         root.open_artist(data["browseId"], title)
 
-    
     def on_row_right_click(self, gesture, n_press, x, y, row):
         if not hasattr(row, "item_data"):
             return
