@@ -1354,7 +1354,7 @@ class MainWindow(Adw.ApplicationWindow):
                     current_val = current_action.get_state().get_string()
                     if current_val == v:
                         return
-                self.activate_action("color-scheme", GLib.Variant.new_string(v))
+                self.activate_action("win.color-scheme", GLib.Variant.new_string(v))
 
             cb.connect("toggled", _on_toggled)
             row.append(cb)
