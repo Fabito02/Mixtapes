@@ -21,12 +21,6 @@ if sys.platform == "win32":
     except ImportError:
         pass
 
-# CSS that makes the chrome translucent when blurred-cover-bg is active.
-# Loaded via a Gtk.CssProvider at PRIORITY_USER + 1 so it actually wins
-# the cascade against a user's ~/.config/gtk-4.0/gtk.css. Putting these
-# rules in style.css (PRIORITY_APPLICATION = 600) made user CSS at USER
-# (800) overwrite them, which is why the player bar / sidebar / mobile
-# view switcher kept rendering opaque despite the rules being there.
 _BLUR_OVERRIDE_CSS = """
 /* Cover background active state overrides */
 window.cover-bg-active toolbarview,
@@ -74,7 +68,7 @@ window.cover-bg-active .banner-scrim {
   );
 }
 
-window.cover-bg-active .boxed-list.songs-list,
+window.cover-bg-active .songs-list,
 window.cover-bg-active .card.home-speed-tile {
   background-color: alpha(currentColor, 0.1);
 }
@@ -673,7 +667,10 @@ class MainWindow(Adw.ApplicationWindow):
         url = Path(path).as_uri()
         bg_rule = (
             "\nwindow.cover-bg-active, "
-            "window.cover-bg-active.background {\n"
+            "window.cover-bg-active.background, "
+            "window.cover-bg-active bottom-sheet sheet {\n"
+            "    background-color: transparent;\n"
+            "    background: none;\n"
             f'    background-image: url("{url}");\n'
             "    background-size: cover;\n"
             "    background-position: center;\n"
