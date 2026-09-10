@@ -1,10 +1,10 @@
-from gi.repository import Gtk, Adw, GObject, GLib, Pango, Gdk, Gio
-from ui.utils import AsyncPicture, LikeButton, MarqueeLabel, show_toast
+import time as _time
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 from ui.context_menu import MenuAction, build_song_menu
 from ui.queue_panel import QueuePanel
-from ui.widgets.lyrics_view import LyricsView
 from ui.util_classes import ScrolledWindow
-
+from ui.utils import AsyncPicture, LikeButton, MarqueeLabel, show_toast
+from ui.widgets.lyrics_view import LyricsView
 
 MAX_CAROUSEL_COVERS = 31
 CAROUSEL_PRELOAD_RADIUS = 5
@@ -41,13 +41,62 @@ class ExpandedPlayer(Gtk.Box):
         self.set_margin_top(32)
         self.append(self.view_stack)
 
-        self.switcher = Adw.ViewSwitcher()
-        self.switcher.set_stack(self.view_stack)
-        self.switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
-        self.switcher.set_halign(Gtk.Align.CENTER)
-        self.switcher.set_margin_top(8)
-        self.switcher.set_margin_bottom(8)
-        self.append(self.switcher)
+        # ==========================================
+        # TOGGLE GROUP
+        # ==========================================
+        self._toggle_group_is_adw = hasattr(Adw, "ToggleGroup") and hasattr(Adw, "Toggle")
+        self._buttons_by_page = {}
+
+        if self._toggle_group_is_adw:
+            self.toggle_nav = Adw.ToggleGroup()
+            self.toggle_nav.add_css_class("round")
+            self.toggle_nav.set_halign(Gtk.Align.CENTER)
+            self.toggle_nav.set_margin_top(8)
+            self.toggle_nav.set_margin_bottom(8)
+
+            t_player = Adw.Toggle(name="player", label="Player", icon_name="folder-music-symbolic")
+            t_queue = Adw.Toggle(name="queue", label="Queue", icon_name="music-queue-symbolic")
+            t_lyrics = Adw.Toggle(name="lyrics", label="Lyrics", icon_name="format-justify-fill-symbolic")
+
+            self.toggle_nav.add(t_player)
+            self.toggle_nav.add(t_queue)
+            self.toggle_nav.add(t_lyrics)
+
+            self.toggle_nav.connect("notify::active-name", self._on_toggle_group_changed)
+            self.append(self.toggle_nav)
+        else:
+            self.toggle_nav = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            self.toggle_nav.add_css_class("linked")
+            self.toggle_nav.set_halign(Gtk.Align.CENTER)
+            self.toggle_nav.set_margin_top(8)
+            self.toggle_nav.set_margin_bottom(8)
+
+            pages = [
+                ("player", "folder-music-symbolic", "Player"),
+                ("queue", "music-queue-symbolic", "Queue"),
+                ("lyrics", "format-justify-fill-symbolic", "Lyrics"),
+            ]
+
+            first_btn = None
+            for name, icon, label in pages:
+                btn = Gtk.ToggleButton(icon_name=icon)
+                btn.set_tooltip_text(label)
+                if first_btn:
+                    btn.set_group(first_btn)
+                else:
+                    first_btn = btn
+                    btn.set_active(True)
+
+                btn.connect(
+                    "toggled",
+                    lambda b, n=name: self._on_fallback_button_toggled(b, n),
+                )
+                self.toggle_nav.append(btn)
+                self._buttons_by_page[name] = btn
+
+            self.append(self.toggle_nav)
+
+        self.view_stack.connect("notify::visible-child-name", self._on_stack_child_changed)
 
         # ==========================================
         # PLAYER VIEW
@@ -85,7 +134,6 @@ class ExpandedPlayer(Gtk.Box):
         cover_frame.add_controller(cover_click)
 
         self._ignore_page_change = False
-        import time as _time
         self._carousel_user_input_at = 0.0
         self._carousel_user_input_window = 0.8
         self._time = _time
@@ -100,9 +148,7 @@ class ExpandedPlayer(Gtk.Box):
         click.connect("pressed", self._on_carousel_user_input)
         self.carousel.add_controller(click)
 
-        scroll = Gtk.EventControllerScroll.new(
-            Gtk.EventControllerScrollFlags.BOTH_AXES
-        )
+        scroll = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.BOTH_AXES)
         scroll.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         scroll.connect("scroll", self._on_carousel_user_input)
         self.carousel.add_controller(scroll)
@@ -126,7 +172,6 @@ class ExpandedPlayer(Gtk.Box):
         self.title_label.set_label("Not Playing")
         self.title_label.add_css_class("title-3")
 
-        # Container dos artistas com suporte a separadores e múltiplos botões
         self.artists_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
         self.artists_box.set_halign(Gtk.Align.START)
 
@@ -228,8 +273,6 @@ class ExpandedPlayer(Gtk.Box):
         self.prev_btn.set_valign(Gtk.Align.CENTER)
         self.prev_btn.connect("clicked", lambda x: self.player.previous())
 
-        self.more_btn.set_valign(Gtk.Align.CENTER)
-
         self.play_btn = Gtk.Button()
         self.play_btn.set_size_request(64, 64)
         self.play_btn.add_css_class("circular")
@@ -299,8 +342,30 @@ class ExpandedPlayer(Gtk.Box):
 
         self.on_state_changed(self.player, self.player.get_state_string())
 
+    def _on_toggle_group_changed(self, group, _param):
+        name = group.get_active_name()
+        if name and self.view_stack.get_visible_child_name() != name:
+            self.view_stack.set_visible_child_name(name)
+
+    def _on_fallback_button_toggled(self, button, page_name):
+        if button.get_active() and self.view_stack.get_visible_child_name() != page_name:
+            self.view_stack.set_visible_child_name(page_name)
+
+    def _on_stack_child_changed(self, stack, _param):
+        name = stack.get_visible_child_name()
+        if not name:
+            return
+
+        if self._toggle_group_is_adw:
+            if self.toggle_nav.get_active_name() != name:
+                self.toggle_nav.set_active_name(name)
+        else:
+            btn = self._buttons_by_page.get(name)
+            if btn and not btn.get_active():
+                btn.set_active(True)
+
     def set_compact_mode(self, compact):
-        self.switcher.set_visible(compact)
+        self.toggle_nav.set_visible(compact)
         if not compact:
             self.view_stack.set_visible_child_name("player")
             self.set_margin_top(12)
@@ -331,7 +396,8 @@ class ExpandedPlayer(Gtk.Box):
                 self.on_artist_click()
         self.emit("dismiss")
 
-    # --- SIGNAL HANDLERS ---
+    # ── Signal Handlers ───────────────────────────────────────────────────────
+
     def on_metadata_changed(
         self, player, title, artist, thumbnail_url, video_id=None, like_status=None
     ):
@@ -368,7 +434,9 @@ class ExpandedPlayer(Gtk.Box):
                 if aid and self.on_artist_click:
                     btn.connect(
                         "clicked",
-                        lambda _b, a_id=aid, a_name=name: self._on_single_artist_clicked(a_id, a_name)
+                        lambda _b, a_id=aid, a_name=name: self._on_single_artist_clicked(
+                            a_id, a_name
+                        ),
                     )
 
                 self.artists_box.append(btn)
