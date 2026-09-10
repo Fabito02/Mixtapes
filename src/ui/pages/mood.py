@@ -91,6 +91,12 @@ class MoodPage(Adw.Bin):
             self.content_box.set_margin_end(24)
             self.flow_box.set_line_spacing(24)
             self.flow_box.set_child_spacing(24)
+    
+        child = self.flow_box.get_first_child()
+        while child:
+            if hasattr(child, "set_compact_mode"):
+                child.set_compact_mode(compact)
+            child = child.get_next_sibling()
 
     def load_mood(self, params, title):
         self.params = params

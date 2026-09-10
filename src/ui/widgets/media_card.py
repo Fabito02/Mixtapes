@@ -52,12 +52,8 @@ class MediaCardWidget(Gtk.Button):
         else:
             thumbnails = item.get("thumbnails", [])
             thumb_url = thumbnails[-1].get("url") if thumbnails else None
-            
-            self._cover_img = AsyncImage(url=thumb_url, width=CARD_SIZE_DEFAULT, height=CARD_SIZE_DEFAULT, player=player)
+            self._cover_img = AsyncImage(url=thumb_url, size=CARD_SIZE_DEFAULT, player=player)
             self._cover_img.add_css_class("card-cover-img")
-            
-            self._cover_img.set_size_request(-1, -1)
-            
             self._cover_img.video_id = (
                 item.get("videoId") or item.get("playlistId") or item.get("browseId")
             )
@@ -137,6 +133,9 @@ class MediaCardWidget(Gtk.Button):
         if self.sub_clamp:
             self.sub_clamp.set_maximum_size(target_size)
             self.sub_clamp.set_tightening_threshold(target_size)
+
+        if self._cover_img and hasattr(self._cover_img, "set_compact"):
+            self._cover_img.set_compact(compact)
 
     def set_compact(self, compact: bool):
         self.set_compact_mode(compact)
