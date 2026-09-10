@@ -35,7 +35,7 @@ window.cover-bg-active listbox > row {
 
 window.cover-bg-active .sidebar-pane {
   background: none;
-  background-color: alpha(mix(@accent_color, #4a4a4a, 0.75), 0.18);
+  background-color: alpha(mix(@accent_color, #4a4a4a, 0.65), 0.16);
 }
 
 window.cover-bg-active headerbar {
