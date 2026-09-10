@@ -730,7 +730,6 @@ class MainWindow(Adw.ApplicationWindow):
         )
         
         standalone = color_utils.ensure_contrast(solid, view_bg, self._contrast_target())
-        accent_color = color_utils.to_css(solid)
         tinted = prefs.get("dynamic_accent", False) and prefs.get("tinted_background", False)
         tint_vars = ""
 
@@ -786,10 +785,12 @@ class MainWindow(Adw.ApplicationWindow):
 
         accent_bg = color_utils.to_css(solid)
         accent_fg = color_utils.to_css(standalone)
+        on_accent = color_utils.to_css(color_utils.best_foreground(solid))
         
         css = f"""
         @define-color accent_bg_color {accent_bg};
         @define-color accent_color {accent_fg};
+        @define-color accent_fg_color {on_accent};
 
         {tint_vars}
 
@@ -832,16 +833,36 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ─── Colors derived from whichever accent is in force ──────────────
 
+    def _theme_color(self, name):
+        """Resolve a named color as the live style cascade sees it.
+
+        Covers a user's ``gtk.css`` overrides, which the libadwaita
+        accent API does not report.
+        """
+        try:
+            found, rgba = self.get_style_context().lookup_color(name)
+        except Exception:
+            return None
+        if not found:
+            return None
+        return (rgba.red, rgba.green, rgba.blue)
+
     def _accent_in_force(self):
         """`(solid, standalone, view_bg)` for the accent in force.
 
-        The cover-derived override, or libadwaita's own accent when
-        dynamic accent is off.
+        The cover-derived override, or whatever the stylesheet resolves
+        the accent to when dynamic accent is off.
         """
         if self._accent_override is not None:
             return self._accent_override
         is_dark = self._is_dark()
-        view_bg = color_utils.from_hex("#1e1e1e" if is_dark else "#ffffff")
+        view_bg = self._theme_color("view_bg_color") or color_utils.from_hex(
+            "#1e1e1e" if is_dark else "#ffffff"
+        )
+        solid = self._theme_color("accent_bg_color")
+        standalone = self._theme_color("accent_color")
+        if solid and standalone:
+            return solid, standalone, view_bg
         try:
             accent = Adw.StyleManager.get_default().get_accent_color()
             rgba = accent.to_rgba()

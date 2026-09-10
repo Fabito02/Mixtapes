@@ -87,8 +87,8 @@ def _make_library_card(player, title, subtitle, thumb_url, fallback_icon, on_cli
         icon_box.add_css_class("card-download-icon")
         icon_box.set_valign(Gtk.Align.CENTER)
         icon_box.set_halign(Gtk.Align.CENTER)
-        icon_box.set_hexpand(True)
-        icon_box.set_vexpand(True)
+        icon_box.set_hexpand(False)
+        icon_box.set_vexpand(False)
 
         icon = Gtk.Image.new_from_icon_name(custom_icon)
         icon.set_halign(Gtk.Align.CENTER)
@@ -1022,6 +1022,7 @@ class LibraryPage(Adw.Bin):
                     icon_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
                     icon_box.add_css_class("song-download-icon")
                     icon_box.add_css_class("song-img")
+                    icon_box.set_vexpand(False)
 
                     icon = Gtk.Image.new_from_icon_name("folder-download-symbolic")
                     icon.set_halign(Gtk.Align.CENTER)

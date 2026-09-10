@@ -20,8 +20,8 @@
 @define-color row_hover alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.15);
 @define-color row_selected alpha(@accent_bg_color, 0.12);
 @define-color playing_bg alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.3);
-@define-color playing_fg mix(in oklab, @accent_color, @view_fg_color 60%);
-@define-color playing_fg_over_blur mix(in oklab, @accent_color, @view_fg_color 78%);
+@define-color playing_fg color-mix(in oklab, @accent_color, @view_fg_color 60%);
+@define-color playing_fg_over_blur color-mix(in oklab, @accent_color, @view_fg_color 78%);
 @define-color playing_surface_over_blur alpha(mix(@view_bg_color, @accent_bg_color, 0.35), 0.5);
 @define-color blur_panel_bg alpha(@window_bg_color, 0.35);
 @define-color blur_panel_bg_weak alpha(@window_bg_color, 0.25);
@@ -195,7 +195,11 @@ box.song-row, .song-row-button {
 }
 
 .playing {
-  color: @accent_color;
+  color: @playing_fg;
+}
+
+box.song-row.playing {
+  background-color: @playing_bg;
 }
 
 /* Boxed-list rows carry libadwaita's opaque row bg, masking the inner
@@ -402,7 +406,6 @@ flowboxchild:focus-visible {
 
 .card-download-icon {
     border-radius: 12px;
-    margin-bottom: 8px;
     min-width: 150px;
     min-height: 150px;
     background: linear-gradient(

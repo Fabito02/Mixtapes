@@ -632,20 +632,26 @@ class HomePage(Adw.Bin):
         text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_col.set_valign(Gtk.Align.CENTER)
         text_col.set_hexpand(True)
+        text_col.set_size_request(
+            tile_width - SPEED_TILE_COVER - (22 if compact else 26), -1
+        )
 
         title_label = Gtk.Label(label=item.get("title", "Unknown"))
-        title_label.set_halign(Gtk.Align.START)
+        title_label.set_halign(Gtk.Align.FILL)
+        title_label.set_xalign(0)
         title_label.set_ellipsize(Pango.EllipsizeMode.END)
         title_label.set_lines(2)
         title_label.set_wrap(True)
         title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        title_label.set_max_width_chars(1)
         title_label.set_hexpand(True)
         title_label.add_css_class("home-speed-title")
         text_col.append(title_label)
 
         text_col.append(
             self._build_kind_subtitle(
-                item, kind, dim=True, include_kind=True, include_kind_word=False
+                item, kind, dim=True, include_kind=True, include_kind_word=False,
+                constrain_width=True
             )
         )
         inner_box.append(text_col)
@@ -847,12 +853,13 @@ class HomePage(Adw.Bin):
     # ─── Subtitle row with kind icon + detail ──────────────────────────────
 
     def _build_kind_subtitle(
-        self, item, kind, dim=True, include_kind=True, include_kind_word=None
+        self, item, kind, dim=True, include_kind=True, include_kind_word=None,
+        constrain_width=False
     ):
         if include_kind_word is None:
             include_kind_word = include_kind
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        row.set_halign(Gtk.Align.START)
+        row.set_halign(Gtk.Align.FILL if constrain_width else Gtk.Align.START)
 
         icon_name = _kind_icon(kind) if include_kind else None
         if icon_name:
@@ -885,6 +892,11 @@ class HomePage(Adw.Bin):
             label.set_halign(Gtk.Align.START)
             label.set_ellipsize(Pango.EllipsizeMode.END)
             label.set_lines(1)
+            if constrain_width:
+                label.set_max_width_chars(1)
+                label.set_halign(Gtk.Align.FILL)
+                label.set_xalign(0)
+                label.set_hexpand(True)
             label.add_css_class("caption")
             if dim:
                 label.add_css_class("dim-label")
