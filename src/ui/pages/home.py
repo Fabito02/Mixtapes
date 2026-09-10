@@ -373,6 +373,9 @@ class HomePage(Adw.Bin):
         self._propagate_compact(self.feed_box, compact)
 
     def _propagate_compact(self, widget, compact):
+        if hasattr(widget, "has_css_class") and widget.has_css_class("home-section-header"):
+            return
+            
         if hasattr(widget, "set_compact"):
             try:
                 widget.set_compact(compact)
@@ -537,7 +540,7 @@ class HomePage(Adw.Bin):
         header.add_css_class("home-section-header")
 
         if strapline_url:
-            cover = AsyncImage(url=strapline_url, size=28, player=self.player)
+            cover = AsyncImage(url=strapline_url, size=30, player=self.player)
             wrapper = Gtk.Box()
             wrapper.set_overflow(Gtk.Overflow.HIDDEN)
             wrapper.add_css_class("home-section-cover")
@@ -693,7 +696,6 @@ class HomePage(Adw.Bin):
     def _add_song_list(self, section_box, items, bucket=None, section_title=""):
         list_box = Gtk.ListBox()
         list_box.add_css_class("boxed-list")
-        list_box.add_css_class("songs-list")
         list_box.set_selection_mode(Gtk.SelectionMode.NONE)
         list_box.connect("row-activated", self._on_song_row_activated)
 
