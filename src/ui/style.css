@@ -15,17 +15,6 @@
                sans-serif;
 }
 
-@define-color scrim_top mix(@window_bg_color, transparent, 0.4);
-@define-color scrim_mid mix(@window_bg_color, transparent, 0.8);
-@define-color row_hover alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.15);
-@define-color row_selected alpha(@accent_bg_color, 0.12);
-@define-color playing_bg alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.3);
-@define-color playing_fg color-mix(in oklab, @accent_color, @view_fg_color 60%);
-@define-color playing_fg_over_blur color-mix(in oklab, @accent_color, @view_fg_color 78%);
-@define-color playing_surface_over_blur alpha(mix(@view_bg_color, @accent_bg_color, 0.35), 0.5);
-@define-color blur_panel_bg alpha(@window_bg_color, 0.35);
-@define-color blur_panel_bg_weak alpha(@window_bg_color, 0.25);
-
 .rounded {
   border-radius: 12px;
 }
@@ -207,11 +196,15 @@ listboxrow label {
 }
 
 .playing {
-  color: @playing_fg;
+  color: @accent_color;
+}
+
+.cover-desktop {
+  border-radius: 18px;
 }
 
 box.song-row.playing {
-  background-color: @playing_bg;
+  background-color: alpha(mix(@accent_bg_color, #ffffff60, 0.1), 0.3);
 }
 
 /* Boxed-list rows carry libadwaita's opaque row bg, masking the inner
@@ -224,7 +217,7 @@ list row.playing {
   background-color: alpha(@accent_bg_color, 0.18);
 }
 list row.playing label {
-  color: @playing_fg;
+  color: @accent_color;
 }
 
 /* The queue inside the mobile bottom sheet is one surface, not a content
@@ -303,10 +296,6 @@ listview.playlist-view > row:disabled {
 .artist-horizontal-item {
   padding: 10px;
   border-radius: 16px;
-}
-
-.artist-horizontal-item box clamp {
-  margin: 0px;
 }
 
 .explicit-badge {
@@ -704,4 +693,8 @@ window > windowhandle,
 /* Liked button */
 .liked-button {
   color: @accent_color;
+}
+
+.disliked-button {
+    color: @destructive_color;
 }

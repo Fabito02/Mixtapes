@@ -97,8 +97,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._last_dominant_rgb = None
 
-
-
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         assets_path = os.path.join(project_root, "assets", "icons")
 
@@ -273,6 +271,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.main_stack = Gtk.Stack()
         self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         self.main_stack.set_transition_duration(300)
+        self.main_stack.connect("notify::visible-child-name", self._on_main_stack_changed)
 
         self.content_bin = ScrolledWindow()
         self.content_bin.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
@@ -281,7 +280,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.main_stack.add_named(self.content_bin, "browser")
 
         from ui.queue_panel import QueuePanel
-
 
         self.player = Player()
 
@@ -366,12 +364,17 @@ class MainWindow(Adw.ApplicationWindow):
         self.expanded_player.set_vexpand(True)
         self.expanded_player.connect("dismiss", self._on_player_dismissed)
         
+        self.desktop_cover_view = DesktopCoverView(
+            self.player,
+            on_artist_click=self.on_player_bar_artist_click,
+            on_queue_click=self.toggle_queue,
+        )
+        self.desktop_cover_view.connect("dismiss", self._on_player_dismissed)
+        self.main_stack.add_named(self.desktop_cover_view, "cover")
+        
         self.player.connect("metadata-changed", self._on_player_metadata_sync)
 
         self.bottom_sheet.connect("notify::open", self._on_bottom_sheet_open_changed)
-
-        self.desktop_cover_view = DesktopCoverView(self.player)
-        self.main_stack.add_named(self.desktop_cover_view, "cover")
 
         # Do NOT set sheet or add to stack yet, managed by breakpoint or expand request
         self.toast_overlay = Adw.ToastOverlay()
@@ -428,7 +431,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.init_pages()
 
-
         # COLLAPSE SIDERBAR (< 750px)
         collapse_breakpoint = Adw.Breakpoint.new(
             Adw.BreakpointCondition.parse("max-width: 750px")
@@ -466,6 +468,12 @@ class MainWindow(Adw.ApplicationWindow):
         monitor.connect("network-changed", self._on_network_changed)
         add_online_listener(self._apply_network_state)
         GLib.timeout_add_seconds(5, self._network_poll_tick)
+
+    def _on_main_stack_changed(self, stack, param):
+        """Reacts to stack changes. Whenever we leave 'cover' due to any interaction, show player-bar again."""
+        if getattr(self, "player", None) is not None:
+            self._on_player_bar_visibility(self.player)
+        self.update_back_button_visibility()
 
     def _on_network_changed(self, monitor, available):
         if self._net_debounce_id:
@@ -789,12 +797,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         accent_bg = color_utils.to_css(solid)
         accent_fg = color_utils.to_css(standalone)
-        on_accent = color_utils.to_css(color_utils.best_foreground(solid))
         
         css = f"""
         @define-color accent_bg_color {accent_bg};
         @define-color accent_color {accent_fg};
-        @define-color accent_fg_color {on_accent};
 
         {tint_vars}
 
@@ -970,13 +976,14 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_player_dismissed(self, player):
         """Called when the player is dismissed (tapped back on desktop or swiped down on mobile)."""
-        if self._is_compact:
-            self.bottom_sheet.set_open(False)
+        if getattr(self, "_is_compact", False):
+            if hasattr(self, "bottom_sheet"):
+                self.bottom_sheet.set_open(False)
         else:
             was_cover = self.main_stack.get_visible_child_name() == "cover"
             if was_cover:
                 self.main_stack.set_transition_type(
-                    Gtk.StackTransitionType.SLIDE_DOWN
+                    Gtk.StackTransitionType.CROSSFADE
                 )
             self.main_stack.set_visible_child_name("browser")
             if was_cover and hasattr(self, "_prev_main_transition"):
@@ -987,6 +994,7 @@ class MainWindow(Adw.ApplicationWindow):
                 )
             self.back_btn.set_visible(False)
             self.update_back_button_visibility()
+
         if hasattr(self, "player_bar"):
             self.player_bar.set_expanded(False)
 
@@ -2421,9 +2429,10 @@ class MainWindow(Adw.ApplicationWindow):
             os.makedirs(os.path.dirname(_prefs_path), exist_ok=True)
             with open(_prefs_path, "w") as f:
                 _json.dump(_prefs, f)
-            viz = self._get_visualizer()
-            if viz is not None:
-                viz.set_visible(on)
+
+            if hasattr(self, "desktop_cover_view") and self.desktop_cover_view:
+                self.desktop_cover_view.update_visualizer_state(on)
+
             bars_row.set_sensitive(on)
             smooth_row.set_sensitive(on)
 
@@ -4122,6 +4131,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._apply_window_controls_position()
 
     def _on_player_bar_visibility(self, player, *args):
+        if not getattr(self, "_is_compact", False) and self.main_stack.get_visible_child_name() == "cover":
+            self.player_bar_revealer.set_reveal_child(False)
+            return
+
         has_queue = len(self.player.queue) > 0
         self.player_bar_revealer.set_reveal_child(has_queue)
 
@@ -4130,7 +4143,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self.split_view.set_show_sidebar(False)
                 self._sidebar_explicitly_opened = False
             if (
-                self._is_compact
+                getattr(self, "_is_compact", False)
                 and hasattr(self, "bottom_sheet")
                 and self.bottom_sheet.get_open()
             ):
@@ -4171,7 +4184,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._prev_main_transition = self.main_stack.get_transition_type()
             self._prev_main_duration = self.main_stack.get_transition_duration()
             self.main_stack.set_transition_duration(200)
-            self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP)
+            self.main_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
             self.main_stack.set_visible_child_name("cover")
             
             v_id = self.player.current_video_id

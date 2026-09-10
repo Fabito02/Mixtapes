@@ -119,19 +119,11 @@ class MediaCardWidget(Gtk.Button):
 
     def set_compact_mode(self, compact: bool):
         self._compact = bool(compact)
-        target_size = CARD_SIZE_COMPACT if compact else CARD_SIZE_DEFAULT
 
         if compact:
             self.add_css_class("compact")
         else:
             self.remove_css_class("compact")
-
-        self.title_clamp.set_maximum_size(target_size)
-        self.title_clamp.set_tightening_threshold(target_size)
-
-        if self.sub_clamp:
-            self.sub_clamp.set_maximum_size(target_size)
-            self.sub_clamp.set_tightening_threshold(target_size)
 
     def set_compact(self, compact: bool):
         self.set_compact_mode(compact)

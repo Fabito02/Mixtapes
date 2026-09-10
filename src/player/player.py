@@ -1174,11 +1174,11 @@ class Player(GObject.Object):
 
         if hasattr(self.client, "get_known_like_status") and hasattr(self.client, "set_known_like_status"):
             known = self.client.get_known_like_status(video_id)
-            if like_status in ("LIKE", "DISLIKE"):
-                self.client.set_known_like_status(video_id, like_status)
-            elif known:
+            if known is not None:
                 like_status = known
                 track["likeStatus"] = known
+            else:
+                self.client.set_known_like_status(video_id, like_status)
 
         if not artist and track.get("artists"):
             artist = ", ".join(
@@ -1199,6 +1199,7 @@ class Player(GObject.Object):
         track["artist"] = artist
         track["title"] = title
         track["thumb"] = thumb
+
         return video_id, title, artist, thumb, like_status
 
     def _play_current_index(self):

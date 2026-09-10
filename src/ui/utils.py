@@ -1646,40 +1646,127 @@ class LikeButton(Gtk.Button):
         super().__init__(**kwargs)
         self.client = client
         self.video_id = video_id
+        self._suppress_next_click = False
         _ACTIVE_LIKE_BUTTONS.add(self)
 
         resolved = None
         if video_id and hasattr(self.client, "get_known_like_status"):
             resolved = self.client.get_known_like_status(video_id)
-        
+
         self.status = resolved or initial_status or "INDIFFERENT"
 
         self.add_css_class("flat")
         self.add_css_class("circular")
         self.set_valign(Gtk.Align.CENTER)
 
+        self._setup_context_menu()
         self.update_icon()
+
         self.connect("clicked", self.on_clicked)
+
+    def _setup_context_menu(self):
+        self._popover = Gtk.Popover()
+        self._popover.set_parent(self)
+        self._popover.set_has_arrow(True)
+        self._popover.connect("closed", self._on_popover_closed)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_top(4)
+        box.set_margin_bottom(4)
+        box.set_margin_start(4)
+        box.set_margin_end(4)
+
+        self._dislike_menu_btn = Gtk.Button()
+        self._dislike_menu_btn.add_css_class("flat")
+        self._dislike_menu_btn.connect("clicked", self._on_dislike_menu_clicked)
+
+        dislike_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._dislike_icon = Gtk.Image.new_from_icon_name("heart-broken-symbolic")
+        self._dislike_label = Gtk.Label(label="Dislike")
+        dislike_content.append(self._dislike_icon)
+        dislike_content.append(self._dislike_label)
+
+        self._dislike_menu_btn.set_child(dislike_content)
+        box.append(self._dislike_menu_btn)
+        self._popover.set_child(box)
+
+        right_click = Gtk.GestureClick()
+        right_click.set_button(Gdk.BUTTON_SECONDARY)
+        right_click.connect("pressed", lambda g, n, x, y: self._show_menu())
+        self.add_controller(right_click)
+
+        long_press = Gtk.GestureLongPress()
+        long_press.set_touch_only(False)
+        long_press.connect("pressed", self._on_long_press)
+        self.add_controller(long_press)
+
+    def _on_popover_closed(self, _popover):
+        def _clear():
+            self._suppress_next_click = False
+            return GLib.SOURCE_REMOVE
+        GLib.idle_add(_clear)
+
+    def _on_long_press(self, gesture, x, y):
+        self._suppress_next_click = True
+        self._show_menu()
+
+    def _show_menu(self):
+        if not self.video_id:
+            return
+        if self.status == "DISLIKE":
+            self._dislike_label.set_label("Remove Dislike")
+        else:
+            self._dislike_label.set_label("Dislike")
+
+        rect = Gdk.Rectangle()
+        rect.x = 0
+        rect.y = 0
+        rect.width = self.get_width()
+        rect.height = self.get_height()
+        self._popover.set_pointing_to(rect)
+        self._popover.popup()
+
+    def _on_dislike_menu_clicked(self, _btn):
+        self._popover.popdown()
+        self._suppress_next_click = False
+        target_status = "INDIFFERENT" if self.status == "DISLIKE" else "DISLIKE"
+        self._apply_rating(target_status)
 
     def update_icon(self):
         if self.status == "LIKE":
             self.set_icon_name("heart-filled-symbolic")
             self.add_css_class("liked-button")
-            self.set_tooltip_text("Unlike")
+            self.remove_css_class("disliked-button")
+            self.set_tooltip_text("Unlike (Hold or right-click for Dislike)")
         elif self.status == "DISLIKE":
-            self.set_icon_name("view-restore-symbolic")
-            self.set_tooltip_text("Disliked")
+            self.set_icon_name("heart-broken-symbolic")
+            self.add_css_class("disliked-button")
+            self.remove_css_class("liked-button")
+            self.set_tooltip_text("Disliked (Hold or right-click to remove)")
         else:
             self.set_icon_name("heart-outline-thick-symbolic")
             self.remove_css_class("liked-button")
-            self.set_tooltip_text("Like")
+            self.remove_css_class("disliked-button")
+            self.set_tooltip_text("Like (Hold or right-click for Dislike)")
 
-    def on_clicked(self, btn):
+    def on_clicked(self, _btn):
+        if not self.video_id:
+            return
+
+        if self._suppress_next_click or self._popover.get_visible():
+            self._suppress_next_click = False
+            return
+
+        new_status = "INDIFFERENT" if self.status == "LIKE" else "LIKE"
+        self._apply_rating(new_status)
+
+    def _apply_rating(self, new_status):
         if not self.video_id:
             return
 
         old_status = self.status
-        new_status = "INDIFFERENT" if old_status == "LIKE" else "LIKE"
+        self.status = new_status
+        self.update_icon()
 
         if hasattr(self.client, "set_known_like_status"):
             self.client.set_known_like_status(self.video_id, new_status)
@@ -1691,7 +1778,13 @@ class LikeButton(Gtk.Button):
             for track in player.queue:
                 if track.get("videoId") == self.video_id:
                     track["likeStatus"] = new_status
-                    break
+
+        try:
+            from player.downloads import get_download_db
+            db = get_download_db()
+            db.invalidate_playlist_cache("LM")
+        except Exception:
+            pass
 
         def do_rate():
             success = self.client.rate_song(self.video_id, new_status)
@@ -1703,31 +1796,34 @@ class LikeButton(Gtk.Button):
                     for track in player.queue:
                         if track.get("videoId") == self.video_id:
                             track["likeStatus"] = old_status
-                            break
-            else:
-                if new_status == "INDIFFERENT":
-                    from player.downloads import get_download_db
-                    get_download_db().invalidate_playlist_cache("LM")
 
         threading.Thread(target=do_rate, daemon=True).start()
 
     def set_data(self, video_id, status):
         self.video_id = video_id
-        if video_id:
-            resolved = None
-            if hasattr(self.client, "get_known_like_status"):
-                resolved = self.client.get_known_like_status(video_id)
-            
-            if status in ("LIKE", "DISLIKE"):
-                self.status = status
-                if hasattr(self.client, "set_known_like_status"):
-                    self.client.set_known_like_status(video_id, status)
-            elif resolved:
-                self.status = resolved
-            else:
-                self.status = status or "INDIFFERENT"
+        if not video_id:
+            self.status = "INDIFFERENT"
+            self.update_icon()
+            self.set_visible(False)
+            return
+
+        resolved = None
+        if hasattr(self.client, "get_known_like_status"):
+            resolved = self.client.get_known_like_status(video_id)
+
+        if resolved is not None:
+            self.status = resolved
         else:
             self.status = status or "INDIFFERENT"
+            if hasattr(self.client, "set_known_like_status"):
+                self.client.set_known_like_status(video_id, self.status)
+
+        player = getattr(self.client, "player", None) or getattr(self, "player", None)
+        if player and hasattr(player, "queue"):
+            for track in player.queue:
+                if track.get("videoId") == video_id:
+                    track["likeStatus"] = self.status
+                    break
 
         self.update_icon()
-        self.set_visible(bool(video_id))
+        self.set_visible(True)

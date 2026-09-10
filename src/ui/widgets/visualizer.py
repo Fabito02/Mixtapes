@@ -325,8 +325,9 @@ class Visualizer(Gtk.DrawingArea):
     # Faint baseline so the row is always visible. Active bars use a wide
     # alpha sweep (ACTIVE_ALPHA_MIN at level ~0 up to 1.0 at peak) so the
     # color fade clearly tracks bar height — short = dim, tall = bright.
-    IDLE_ALPHA = 0.18
-    ACTIVE_ALPHA_MIN = 0.35
+    IDLE_ALPHA = 0.08
+    ACTIVE_ALPHA_MIN = 0.15
+    ACTIVE_ALPHA_MAX = 0.6
 
     def _draw(self, _area, cr, width, height):
         if width <= 0 or height <= 0:
@@ -352,7 +353,7 @@ class Visualizer(Gtk.DrawingArea):
                 # range — a bar at level 0.25 already lands at alpha ~0.65,
                 # not the ~0.5 a linear curve would give. Means small peaks
                 # are clearly distinguishable from the idle baseline.
-                alpha = self.ACTIVE_ALPHA_MIN + (1.0 - self.ACTIVE_ALPHA_MIN) * (clamped ** 0.5)
+                alpha = self.ACTIVE_ALPHA_MIN + (self.ACTIVE_ALPHA_MAX - self.ACTIVE_ALPHA_MIN) * (clamped ** 0.5)
             else:
                 alpha = self.IDLE_ALPHA
             cr.set_source_rgba(r, g, b, alpha)
