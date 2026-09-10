@@ -78,10 +78,11 @@ class PlayerBar(Gtk.Box):
         self.artist_label.set_width_chars(1)
         self.artist_label.add_css_class("caption")
 
-        self.artist_btn.set_child(self.artist_label)
-
+        self.artists_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self.artists_box.set_halign(Gtk.Align.START)
+        
         meta_box.append(self.title_label)
-        meta_box.append(self.artist_btn)
+        meta_box.append(self.artists_box)
 
         content_box.append(meta_box)
 
@@ -472,7 +473,48 @@ class PlayerBar(Gtk.Box):
         self.current_title = title
         self.current_artist = artist
         self.title_label.set_label(title)
-        self.artist_label.set_label(artist)
+
+        while child := self.artists_box.get_first_child():
+            self.artists_box.remove(child)
+
+        track = None
+        if 0 <= player.current_queue_index < len(player.queue):
+            track = player.queue[player.current_queue_index]
+
+        artists_list = track.get("artists", []) if track else []
+
+        if artists_list and isinstance(artists_list, list):
+            for i, art in enumerate(artists_list):
+                if isinstance(art, dict):
+                    name = art.get("name", "")
+                    aid = art.get("id")
+                else:
+                    name = str(art)
+                    aid = None
+
+                btn = Gtk.Button()
+                btn.add_css_class("flat")
+                btn.add_css_class("link-btn")
+                btn.set_has_frame(False)
+                
+                lbl = Gtk.Label(label=name)
+                lbl.add_css_class("caption")
+                btn.set_child(lbl)
+
+                if aid and self.on_artist_click:
+                    btn.connect("clicked", lambda _b, a_id=aid, a_name=name: self.on_artist_click(a_id, a_name))
+
+                self.artists_box.append(btn)
+
+                if i < len(artists_list) - 1:
+                    sep = Gtk.Label(label=", ")
+                    sep.add_css_class("caption")
+                    self.artists_box.append(sep)
+        else:
+            lbl = Gtk.Label(label=artist or "Unknown Artist")
+            lbl.add_css_class("caption")
+            self.artists_box.append(lbl)
+
         if thumbnail_url:
             self.cover_img.video_id = video_id
             self.cover_img.load_url(thumbnail_url)

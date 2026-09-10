@@ -34,8 +34,6 @@ class ExpandedPlayer(Gtk.Box):
 
         self.view_stack = Adw.ViewStack()
         self.view_stack.set_vexpand(True)
-        # Adw.ViewStack doesn't support transition types in all versions,
-        # and it's handled by libadwaita's animation system.
 
         self.switcher_title = Adw.ViewSwitcherTitle()
         self.switcher_title.set_stack(self.view_stack)
@@ -52,7 +50,7 @@ class ExpandedPlayer(Gtk.Box):
         self.append(self.switcher)
 
         # ==========================================
-        # PAGE 1: THE PLAYER VIEW
+        # PLAYER VIEW
         # ==========================================
         self.player_scroll = ScrolledWindow()
         self.player_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -64,13 +62,12 @@ class ExpandedPlayer(Gtk.Box):
 
         self.covers = []
         self._cover_offset = 0
-        self.cover_img = self._make_cover()  # fallback center
+        self.cover_img = self._make_cover()
 
         self.carousel = Adw.Carousel()
         self.carousel.set_spacing(16)
         self.carousel.set_interactive(True)
 
-        # The frame clips to show only the center cover
         cover_frame = Gtk.AspectFrame(ratio=1.0, obey_child=False)
         cover_frame.set_halign(Gtk.Align.CENTER)
         cover_frame.set_valign(Gtk.Align.CENTER)
@@ -82,45 +79,34 @@ class ExpandedPlayer(Gtk.Box):
         cover_frame.set_margin_end(24)
         self._cover_frame = cover_frame
 
-        # Add tap gesture for album navigation
         cover_click = Gtk.GestureClick()
         cover_click.connect("pressed", self._on_cover_pressed)
         cover_click.connect("released", self._on_cover_tapped)
         cover_frame.add_controller(cover_click)
 
         self._ignore_page_change = False
-        # The carousel emits notify::position both for user swipes AND for
-        # layout settles after we programmatically scroll_to a new page.
-        # The two are indistinguishable from the signal alone, so the
-        # `_ignore_page_change` window can race with a late settle event
-        # and cause `_do_jump(0)` to fire — snapping playback back to the
-        # first track right after the user clicked a different one. To
-        # reject those late settles, we only act on position-changed when
-        # we've seen a real user gesture (drag or click) on the carousel
-        # within the recent past.
         import time as _time
         self._carousel_user_input_at = 0.0
-        self._carousel_user_input_window = 0.8  # seconds
+        self._carousel_user_input_window = 0.8
         self._time = _time
+
         drag = Gtk.GestureDrag()
         drag.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         drag.connect("drag-begin", self._on_carousel_user_input)
         self.carousel.add_controller(drag)
+
         click = Gtk.GestureClick()
         click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         click.connect("pressed", self._on_carousel_user_input)
         self.carousel.add_controller(click)
-        # Trackpad / mouse wheel swipes don't fire the gesture
-        # controllers above — they go through EventControllerScroll
-        # (which Adw.Carousel uses internally to scroll its pages).
-        # Listen on CAPTURE so we stamp the user-input timestamp before
-        # the carousel consumes the event.
+
         scroll = Gtk.EventControllerScroll.new(
             Gtk.EventControllerScrollFlags.BOTH_AXES
         )
         scroll.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         scroll.connect("scroll", self._on_carousel_user_input)
         self.carousel.add_controller(scroll)
+
         self.carousel.connect("notify::position", self._on_carousel_position_changed)
         self.connect("map", self._on_map)
 
@@ -136,34 +122,28 @@ class ExpandedPlayer(Gtk.Box):
         text_box.set_hexpand(True)
         text_box.set_valign(Gtk.Align.CENTER)
 
-        # --- Marquee Title ---
         self.title_label = MarqueeLabel()
         self.title_label.set_label("Not Playing")
         self.title_label.add_css_class("title-3")
 
-        self.artist_btn = Gtk.Button()
-        self.artist_btn.add_css_class("flat")
-        self.artist_btn.add_css_class("link-btn")
-        self.artist_btn.set_halign(Gtk.Align.START)
-        self.artist_btn.set_has_frame(False)
-        self.artist_btn.connect("clicked", self._on_artist_btn_clicked)
+        # Container dos artistas com suporte a separadores e múltiplos botões
+        self.artists_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self.artists_box.set_halign(Gtk.Align.START)
 
         self.artist_label = Gtk.Label(label="")
         self.artist_label.add_css_class("heading")
         self.artist_label.set_opacity(0.7)
         self.artist_label.set_ellipsize(Pango.EllipsizeMode.END)
         self.artist_label.set_halign(Gtk.Align.START)
-
-        self.artist_btn.set_child(self.artist_label)
+        self.artists_box.append(self.artist_label)
 
         text_box.append(self.title_label)
-        text_box.append(self.artist_btn)
+        text_box.append(self.artists_box)
 
         self.like_btn = LikeButton(self.player.client, None)
         self.like_btn.set_visible(False)
         self.like_btn.set_valign(Gtk.Align.CENTER)
 
-        # More menu (3-dot)
         self.more_menu_model = Gio.Menu()
         self.more_btn = Gtk.MenuButton(icon_name="view-more-symbolic")
         self.more_btn.add_css_class("flat")
@@ -171,8 +151,6 @@ class ExpandedPlayer(Gtk.Box):
         self.more_btn.set_valign(Gtk.Align.CENTER)
         self.more_btn.set_menu_model(self.more_menu_model)
 
-        # The more menu itself is built by ui.context_menu so it matches
-        # the right-click menus everywhere else.
         self._refresh_more_menu()
 
         meta_row.append(text_box)
@@ -250,7 +228,6 @@ class ExpandedPlayer(Gtk.Box):
         self.prev_btn.set_valign(Gtk.Align.CENTER)
         self.prev_btn.connect("clicked", lambda x: self.player.previous())
 
-        # 3-dot menu button (balances vol_btn on the left)
         self.more_btn.set_valign(Gtk.Align.CENTER)
 
         self.play_btn = Gtk.Button()
@@ -293,7 +270,7 @@ class ExpandedPlayer(Gtk.Box):
         )
 
         # ==========================================
-        # PAGE 2: THE QUEUE VIEW
+        # QUEUE VIEW
         # ==========================================
         queue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         queue_box.set_margin_top(0)
@@ -301,17 +278,13 @@ class ExpandedPlayer(Gtk.Box):
         self.queue_panel = QueuePanel(self.player)
         self.queue_panel.set_vexpand(True)
 
-        # Remove the internal header of QueuePanel since it already has one,
-        # or maybe we want a dedicated header here?
-        # Let's keep it simple for now.
-
         queue_box.append(self.queue_panel)
         self.view_stack.add_titled_with_icon(
             queue_box, "queue", "Queue", "music-queue-symbolic"
         )
 
         # ==========================================
-        # PAGE 3: THE LYRICS VIEW
+        # LYRICS VIEW
         # ==========================================
         self.lyrics_view = LyricsView(self.player)
         self.view_stack.add_titled_with_icon(
@@ -324,24 +297,18 @@ class ExpandedPlayer(Gtk.Box):
         self.player.connect("state-changed", self.on_state_changed)
         self.player.connect("volume-changed", self.on_volume_changed)
 
-        # Initial state sync
         self.on_state_changed(self.player, self.player.get_state_string())
 
     def set_compact_mode(self, compact):
-        """
-        True: Mobile mode (tabbed view with Player/Queue)
-        False: Desktop mode (Player view only, queue is in sidebar)
-        """
         self.switcher.set_visible(compact)
         if not compact:
             self.view_stack.set_visible_child_name("player")
-            self.set_margin_top(12)  # Less padding on desktop
+            self.set_margin_top(12)
         else:
             self.set_margin_top(32)
 
     def _on_map(self, widget):
         GLib.idle_add(self._center_carousel)
-        # Sync like status from current queue track (may have been missed before map)
         if self.player.current_video_id and 0 <= self.player.current_queue_index < len(
             self.player.queue
         ):
@@ -356,12 +323,66 @@ class ExpandedPlayer(Gtk.Box):
         self._ignore_page_change = False
         return False
 
+    def _on_single_artist_clicked(self, aid, name):
+        if self.on_artist_click:
+            try:
+                self.on_artist_click(aid, name)
+            except TypeError:
+                self.on_artist_click()
+        self.emit("dismiss")
+
     # --- SIGNAL HANDLERS ---
     def on_metadata_changed(
-        self, player, title, artist, thumbnail_url, video_id, like_status
+        self, player, title, artist, thumbnail_url, video_id=None, like_status=None
     ):
         self.title_label.set_label(title)
-        self.artist_label.set_label(artist)
+
+        while child := self.artists_box.get_first_child():
+            self.artists_box.remove(child)
+
+        track = None
+        if 0 <= player.current_queue_index < len(player.queue):
+            track = player.queue[player.current_queue_index]
+
+        artists_list = track.get("artists", []) if track else []
+
+        if artists_list and isinstance(artists_list, list):
+            for i, art in enumerate(artists_list):
+                if isinstance(art, dict):
+                    name = art.get("name", "")
+                    aid = art.get("id")
+                else:
+                    name = str(art)
+                    aid = None
+
+                btn = Gtk.Button()
+                btn.add_css_class("flat")
+                btn.add_css_class("link-btn")
+                btn.set_has_frame(False)
+
+                lbl = Gtk.Label(label=name)
+                lbl.add_css_class("heading")
+                lbl.set_opacity(0.7)
+                btn.set_child(lbl)
+
+                if aid and self.on_artist_click:
+                    btn.connect(
+                        "clicked",
+                        lambda _b, a_id=aid, a_name=name: self._on_single_artist_clicked(a_id, a_name)
+                    )
+
+                self.artists_box.append(btn)
+
+                if i < len(artists_list) - 1:
+                    sep = Gtk.Label(label=", ")
+                    sep.add_css_class("heading")
+                    sep.set_opacity(0.7)
+                    self.artists_box.append(sep)
+        else:
+            lbl = Gtk.Label(label=artist or "Unknown Artist")
+            lbl.add_css_class("heading")
+            lbl.set_opacity(0.7)
+            self.artists_box.append(lbl)
 
         if thumbnail_url:
             self.cover_img.video_id = video_id
@@ -371,25 +392,20 @@ class ExpandedPlayer(Gtk.Box):
             self.cover_img.load_url(None)
 
         if video_id:
-            self.like_btn.set_data(video_id, like_status)
+            self.like_btn.set_data(video_id, like_status or "INDIFFERENT")
             self.like_btn.set_visible(True)
         else:
             self.like_btn.set_visible(False)
 
-        # Refresh the more menu for the new track
         self._refresh_more_menu()
-
-        # Preload neighbor covers and sync queue
         self._sync_carousel_queue()
 
-        # Show spinner when a new track starts loading
         if video_id and self.player.duration <= 0:
             self._is_buffering_spinner = True
             self.play_btn_stack.set_visible_child_name("spinner")
             self.play_btn.set_sensitive(False)
 
     def _get_track_thumb(self, index):
-        """Get a thumbnail URL for a track at the given queue index."""
         if index < 0 or index >= len(self.player.queue):
             return None
         track = self.player.queue[index]
@@ -403,7 +419,6 @@ class ExpandedPlayer(Gtk.Box):
         return None
 
     def _sync_carousel_queue(self):
-        """Keep a bounded carousel window around the current queue item."""
         queue_len = len(self.player.queue)
         idx = self.player.current_queue_index
 
@@ -420,11 +435,6 @@ class ExpandedPlayer(Gtk.Box):
             idx = 0
 
         self._ignore_page_change = True
-        # Re-armable token: only the most recent sync's timer is allowed to
-        # clear the flag. Otherwise rapid syncs (e.g. spamming next) leave
-        # earlier 200ms timers in flight; the first one fires and clears the
-        # flag while later syncs are still mutating the carousel, letting a
-        # spurious position-changed leak through and snap playback to 0.
         self._carousel_sync_token = getattr(self, "_carousel_sync_token", 0) + 1
         token = self._carousel_sync_token
 
@@ -449,7 +459,7 @@ class ExpandedPlayer(Gtk.Box):
         if 0 <= page_idx < len(self.covers):
             self.cover_img = self.covers[page_idx]
 
-        self._last_lazy_idx = -1  # Force reload of the new window's covers
+        self._last_lazy_idx = -1
         self._lazy_load_covers_around(page_idx)
 
         if 0 <= page_idx < len(self.covers):
@@ -493,13 +503,9 @@ class ExpandedPlayer(Gtk.Box):
             if cover.url is not None:
                 cover.load_url(None)
 
-        # Load the new window.
         for i in range(new_lo, new_hi + 1):
             _set_cover(i)
 
-        # Clear what just left the window. When old_center is -1 (forced
-        # invalidation from _sync_carousel_queue, or first call), there's
-        # nothing to clear.
         if old_center >= 0:
             old_lo = max(0, old_center - R)
             old_hi = min(total - 1, old_center + R)
@@ -509,7 +515,6 @@ class ExpandedPlayer(Gtk.Box):
                 _clear_cover(page_idx)
 
     def _allow_page_change(self, token=None):
-        # Only the latest sync's timer may clear the flag.
         if token is not None and token != getattr(self, "_carousel_sync_token", 0):
             return False
         self._ignore_page_change = False
@@ -521,7 +526,6 @@ class ExpandedPlayer(Gtk.Box):
         self.pos_label.set_label(self._format_time(pos))
         self.dur_label.set_label(self._format_time(dur))
 
-        # Hide spinner once we have valid duration
         if getattr(self, "_is_buffering_spinner", False) and dur > 0:
             if self.player.get_state_string() == "playing":
                 self._is_buffering_spinner = False
@@ -559,7 +563,6 @@ class ExpandedPlayer(Gtk.Box):
             return
 
         if state == "playing" and self.player.duration <= 0:
-            # We are playing but buffering stream-keep spinner active until duration > 0
             self.play_btn_stack.set_visible_child_name("spinner")
             self.play_btn.set_sensitive(False)
             self._is_buffering_spinner = True
@@ -570,7 +573,6 @@ class ExpandedPlayer(Gtk.Box):
             and self.player.duration <= 0
             and state in ("paused", "stopped")
         ):
-            # Still buffering-keep spinner visible
             return
 
         self._is_buffering_spinner = False
@@ -591,13 +593,10 @@ class ExpandedPlayer(Gtk.Box):
     def on_volume_changed(self, player, volume, muted):
         display_volume = 0.0 if muted else volume
 
-        # Guard against feedback loop: set_value triggers value-changed
-        # which calls set_volume which emits volume-changed again
         self._updating_volume = True
         self.volume_scale.set_value(display_volume)
         self._updating_volume = False
 
-        # Update Icon
         if muted or volume == 0:
             self.vol_btn.set_icon_name("audio-volume-muted-symbolic")
         elif volume < 0.33:
@@ -617,23 +616,17 @@ class ExpandedPlayer(Gtk.Box):
         self._press_y = y
 
     def _on_cover_tapped(self, gesture, n_press, x, y):
-        # Ignore false clicks generated during a swiping drag
         if hasattr(self, "_press_x"):
             if abs(x - self._press_x) > 15 or abs(y - self._press_y) > 15:
-                # User was swiping the carousel
                 return
 
         if self.on_album_click:
             self.on_album_click()
         self.emit("dismiss")
 
-    # --- ADW.CAROUSEL GESTURE HANDLERS ---
-
     # ── More menu (3-dot) handlers ──────────────────────────────────────────
 
     def _refresh_more_menu(self):
-        # Rebuild the model from scratch. Mutating it in place makes
-        # GtkPopoverMenu accumulate stale submenu pages.
         vid = self.player.current_video_id
         idx = self.player.current_queue_index
         queue = self.player.queue or []
@@ -654,8 +647,6 @@ class ExpandedPlayer(Gtk.Box):
             client=self.player.client,
             prefix="ep",
             video_id=vid,
-            # The queue entries would only duplicate the playing track, and
-            # the artist / cover buttons already handle navigation.
             hide=("play_next", "add_to_queue", "goto_artist", "goto_album"),
             extras=extras,
         )
@@ -667,8 +658,6 @@ class ExpandedPlayer(Gtk.Box):
         except Exception as e:
             info = f"Failed to read stream info: {e}"
 
-        # Monospace, selectable body so the user can read the seek range /
-        # protocol at a glance and select-copy individual lines.
         label = Gtk.Label(label=info)
         label.set_selectable(True)
         label.set_wrap(True)
@@ -705,10 +694,6 @@ class ExpandedPlayer(Gtk.Box):
     # ── Carousel gesture handlers ─────────────────────────────────────────
 
     def _on_carousel_user_input(self, *_):
-        """Stamp the timestamp of the last real user interaction with
-        the carousel (drag or click). `_do_jump` requires a recent
-        stamp to act, so layout-driven `notify::position` settles can
-        no longer be misinterpreted as user swipes."""
         self._carousel_user_input_at = self._time.monotonic()
 
     def _on_carousel_position_changed(self, carousel, param):
@@ -718,11 +703,9 @@ class ExpandedPlayer(Gtk.Box):
         pos = carousel.get_position()
         page_idx = int(round(pos))
 
-        # Dynamically load array ranges during scroll
         if 0 <= page_idx < len(self.covers):
             self._lazy_load_covers_around(page_idx)
 
-        # Only trigger when the carousel float position essentially reaches the target page
         if abs(pos - page_idx) > 0.001:
             return
 
@@ -741,24 +724,15 @@ class ExpandedPlayer(Gtk.Box):
 
                 def _do_jump(jump_idx):
                     cur = self.player.current_queue_index
-                    # Require a real user gesture on the carousel (drag
-                    # or click) within the recent window. Programmatic
-                    # settles after queue rebuilds don't update this
-                    # stamp, so spurious position emits — including the
-                    # one that used to snap playback back to track 0
-                    # after the user clicked a different track in the
-                    # home feed — get rejected here.
                     since_input = (
                         self._time.monotonic() - self._carousel_user_input_at
                     )
                     if since_input > self._carousel_user_input_window:
                         self._ignore_page_change = False
                         return False
-                    # Guard: don't override if the player is already loading a different track
                     if self.player._is_loading:
                         self._ignore_page_change = False
                         return False
-                    # Real user swipes only ever move one page at a time.
                     if cur >= 0 and abs(jump_idx - cur) > 1:
                         self._ignore_page_change = False
                         return False

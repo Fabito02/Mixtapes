@@ -517,11 +517,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.expanded_player.add_css_class("player-drawer")
         self.expanded_player.set_vexpand(True)
         self.expanded_player.connect("dismiss", self._on_player_dismissed)
+        
+        self.player.connect("metadata-changed", self._on_player_metadata_sync)
 
-        # Desktop equivalent: just the cover art as a separate
-        # main_stack page. Animated via SLIDE_UP (both pages translate
-        # together instead of overlapping), which avoids the OVER_UP
-        # bleed-through without needing any opaque-background tricks.
+        self.bottom_sheet.connect("notify::open", self._on_bottom_sheet_open_changed)
+
         self.desktop_cover_view = DesktopCoverView(self.player)
         self.main_stack.add_named(self.desktop_cover_view, "cover")
 
@@ -3930,7 +3930,15 @@ class MainWindow(Adw.ApplicationWindow):
 
         cat_page.load_category(params, title)
 
-    def on_player_bar_artist_click(self):
+    def on_player_bar_artist_click(self, channel_id=None, artist_name=None):
+        if channel_id:
+            name = artist_name or "Artist"
+            if channel_id.startswith("FEmusic_library_privately_owned"):
+                self._open_upload_artist(channel_id, name)
+            else:
+                self.open_artist(channel_id, name)
+            return
+
         idx = self.player.current_queue_index
         if 0 <= idx < len(self.player.queue):
             track = self.player.queue[idx]
@@ -3940,7 +3948,6 @@ class MainWindow(Adw.ApplicationWindow):
                 if isinstance(artist, dict) and artist.get("id"):
                     aid = artist["id"]
                     name = artist.get("name", "Artist")
-                    # Upload artists can't be opened as regular artists
                     if aid.startswith("FEmusic_library_privately_owned"):
                         self._open_upload_artist(aid, name)
                     else:
@@ -4108,20 +4115,37 @@ class MainWindow(Adw.ApplicationWindow):
         if hasattr(self, "home_page"):
             self.home_page.refresh()
 
+    def _on_player_metadata_sync(
+        self,
+        player,
+        title="",
+        artist="",
+        thumb_url=None,
+        video_id=None,
+        like_status="INDIFFERENT",
+        *args,
+    ):
+        if hasattr(self, "expanded_player") and hasattr(self.expanded_player, "on_metadata_changed"):
+            try:
+                self.expanded_player.on_metadata_changed(
+                    player, title, artist, thumb_url, video_id, like_status
+                )
+            except TypeError:
+                self.expanded_player.on_metadata_changed(
+                    title, artist, thumb_url, video_id, like_status
+                )
+
+    def _on_bottom_sheet_open_changed(self, sheet, pspec):
+        """Sincroniza o estado do player_bar caso o sheet seja fechado por gesto."""
+        if not sheet.get_open() and hasattr(self, "player_bar"):
+            self.player_bar.set_expanded(False)
+
     def _on_mobile_breakpoint_apply(self, *args):
-        # Adw.Breakpoint can fire 'apply' repeatedly while the user drags the
-        # window across the threshold. Every re-entry reparents the expanded
-        # player and re-syncs every page's compact mode, which is expensive
-        # enough to look like a freeze. Short-circuit if we're already compact.
         if self._is_compact:
             return
         self._is_compact = True
         self.add_css_class("compact")
 
-        # The desktop cover view is a desktop-only affordance — mobile
-        # has its own full expanded player. Snap back to browser
-        # silently (no animation) on resize into compact so the mobile
-        # layout can take over immediately.
         if self.main_stack.get_visible_child_name() == "cover":
             prev = self.main_stack.get_transition_type()
             self.main_stack.set_transition_type(Gtk.StackTransitionType.NONE)
@@ -4130,28 +4154,22 @@ class MainWindow(Adw.ApplicationWindow):
             if hasattr(self, "player_bar"):
                 self.player_bar.set_expanded(False)
 
-        # Hide tabs, show title
         if hasattr(self, "title_bin") and hasattr(self, "title_widget"):
             self.title_bin.set_child(self.title_widget)
 
         if hasattr(self, "player_bar"):
             self.player_bar.set_compact(True)
 
-        # On mobile, the sidebar starts closed; don't touch
-        # _sidebar_explicitly_opened so desktop remembers the last state.
         if hasattr(self, "split_view"):
             self.split_view.set_show_sidebar(False)
 
-        # Dynamic Reparenting for ExpandedPlayer
         if hasattr(self, "expanded_player"):
             parent = self.expanded_player.get_parent()
-            if parent == self.main_stack:
-                self.main_stack.remove(self.expanded_player)
+            if parent is not None:
+                if hasattr(parent, "remove"):
+                    parent.remove(self.expanded_player)
             self.bottom_sheet.set_sheet(self.expanded_player)
 
-        # Defer the per-page compact sync — each page does its own layout
-        # work and piling them into the breakpoint-apply frame is the
-        # single biggest source of the resize jank.
         GLib.idle_add(self._sync_page_compact)
 
     def _on_mobile_breakpoint_unapply(self, *args):
@@ -4168,14 +4186,16 @@ class MainWindow(Adw.ApplicationWindow):
 
         if hasattr(self, "bottom_sheet"):
             self.bottom_sheet.set_open(False)
+            self.bottom_sheet.set_sheet(None)
 
         if hasattr(self, "split_view"):
             GLib.idle_add(self._restore_sidebar_state)
 
         if hasattr(self, "expanded_player"):
-            self.bottom_sheet.set_sheet(None)
             parent = self.expanded_player.get_parent()
-            if parent != self.main_stack:
+            if parent is not None and hasattr(parent, "remove"):
+                parent.remove(self.expanded_player)
+            if self.expanded_player not in [self.main_stack.get_child_by_name("player")]:
                 self.main_stack.add_named(self.expanded_player, "player")
 
         GLib.idle_add(self._sync_page_compact)
@@ -4251,17 +4271,12 @@ class MainWindow(Adw.ApplicationWindow):
 
             self._sidebar_explicitly_opened = new_state
 
-        # Refresh explore/search
         if hasattr(self, "search_page"):
             self.search_page.refresh_explore()
 
         return False
 
     def on_expand_requested(self, player_bar):
-        # Desktop: page-switch to the cover view with SLIDE_UP. Both the
-        # browser and the cover translate together (no overlap), so
-        # neither page's background can bleed through mid-animation.
-        # Restored in _on_player_dismissed.
         if not self._is_compact:
             if self.main_stack.get_visible_child_name() == "cover":
                 self._on_player_dismissed(None)
@@ -4269,13 +4284,12 @@ class MainWindow(Adw.ApplicationWindow):
             self._prev_main_transition = self.main_stack.get_transition_type()
             self._prev_main_duration = self.main_stack.get_transition_duration()
             self.main_stack.set_transition_duration(200)
-            self.main_stack.set_transition_type(
-                Gtk.StackTransitionType.SLIDE_UP
-            )
+            self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP)
             self.main_stack.set_visible_child_name("cover")
+            
             v_id = self.player.current_video_id
-            if v_id:
-                thumb = self.player_bar.cover_img.url
+            if v_id and hasattr(self, "desktop_cover_view"):
+                thumb = getattr(self.player_bar.cover_img, "url", None)
                 self.desktop_cover_view._on_metadata_changed(
                     self.player, "", "", thumb, v_id, "INDIFFERENT"
                 )
@@ -4283,22 +4297,11 @@ class MainWindow(Adw.ApplicationWindow):
             self.player_bar.set_expanded(True)
             return
 
-        # Compact / mobile: full ExpandedPlayer in the bottom sheet.
-        v_id = self.player.current_video_id
-        if v_id:
-            t = (
-                self.player_bar.current_title
-                if hasattr(self.player_bar, "current_title")
-                else "Loading..."
-            )
-            a = (
-                self.player_bar.current_artist
-                if hasattr(self.player_bar, "current_artist")
-                else "Unknown"
-            )
-            self.expanded_player.on_metadata_changed(
-                self.player, t, a, self.player_bar.cover_img.url, v_id, "INDIFFERENT"
-            )
-        if self.expanded_player.get_parent() != self.bottom_sheet:
+        if self.bottom_sheet.get_sheet() != self.expanded_player:
+            parent = self.expanded_player.get_parent()
+            if parent is not None and hasattr(parent, "remove"):
+                parent.remove(self.expanded_player)
             self.bottom_sheet.set_sheet(self.expanded_player)
+
+        self.player_bar.set_expanded(True)
         self.bottom_sheet.set_open(True)
