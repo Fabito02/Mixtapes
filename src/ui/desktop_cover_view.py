@@ -8,7 +8,7 @@ from ui.widgets.lyrics_view import LyricsView
 
 
 _PREFS_PATH = os.path.join(
-    os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
+    GLib.get_user_data_dir(),
     "muse",
     "prefs.json",
 )
@@ -273,7 +273,8 @@ class DesktopCoverView(Adw.Bin):
             self.visualizer.set_visible(False)
         else:
             self.cover_img.set_visible(True)
-            self.visualizer.set_visible(True)
+            viz_enabled = bool(_load_pref("visualizer_enabled", True))
+            self.visualizer.set_visible(viz_enabled)
 
     def _on_cover_enter(self, *_):
         self._pointer_over_cover = True

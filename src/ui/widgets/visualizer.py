@@ -5,11 +5,7 @@ import os
 from gi.repository import Gtk, GLib
 
 
-_PREFS_PATH = os.path.join(
-    os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
-    "muse",
-    "prefs.json",
-)
+_PREFS_PATH = os.path.join(GLib.get_user_data_dir(), "muse", "prefs.json")
 
 
 def _load_pref(key, default):
