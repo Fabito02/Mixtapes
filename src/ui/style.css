@@ -265,20 +265,19 @@ picture.song-img, .song-img, label.song-index {
 .song-download-icon {
     background: linear-gradient(
       135deg,
-      mix(var(--accent-bg-color), white, 0.50) 0%,
-      var(--accent-bg-color) 40%,
-      var(--accent-bg-color) 60%,
-      mix(var(--accent-bg-color), black, 0.35) 100%
+      mix(var(--accent-bg-color), white, 0.5) 0%,
+      var(--accent-bg-color) 50%,
+      mix(var(--accent-bg-color), black, 0.45) 100%
     );
-    color: mix(@accent_bg_color, white, 0.8);  
+    color: white;
 }
 
 .song-download-icon image {
-    -gtk-icon-size: 26px;
+    -gtk-icon-size: 28px;
 }
 
 .compact .song-download-icon image {
-    -gtk-icon-size: 20px;
+    -gtk-icon-size: 22px;
 }
 
 .compact box.song-row label {
@@ -292,6 +291,10 @@ listview.playlist-view > row:disabled {
 .artist-horizontal-item {
   padding: 10px;
   border-radius: 16px;
+}
+
+.artist-horizontal-item box clamp {
+  margin: 0px;
 }
 
 .explicit-badge {
@@ -410,19 +413,18 @@ flowboxchild:focus-visible {
     min-height: 150px;
     background: linear-gradient(
       135deg,
-      mix(var(--accent-bg-color), white, 0.35) 0%,
-      var(--accent-bg-color) 40%,
-      var(--accent-bg-color) 60%,
-      mix(var(--accent-bg-color), black, 0.35) 100%
+      mix(var(--accent-bg-color), white, 0.5) 0%,
+      var(--accent-bg-color) 50%,
+      mix(var(--accent-bg-color), black, 0.45) 100%
     );
-    color: mix(@accent_bg_color, white, 0.8);
-    -gtk-icon-size: 60px;
+    color: white;
+    -gtk-icon-size: 72px;
 }
 
 .compact .card-download-icon {
-  -gtk-icon-size: 52px;
-  min-width: 130px;
-  min-height: 130px;
+    min-width: 130px;
+    min-height: 130px;
+    -gtk-icon-size: 60px;
 }
 
 /* Header strapline cover (album/artist photo for "Based on X" rows). */

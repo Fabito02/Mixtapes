@@ -613,7 +613,7 @@ class LibraryPage(Adw.Bin):
             prev_child = card
 
     def _rebuild_playlists_grid(self, playlists):
-        playlists.insert(2, {'title': 'Downloads', 'playlistId': 'DL', 'thumbnails': [{'url': '', 'width': 192, 'height': 192}, {'url': '', 'width': 576, 'height': 576}], 'owned': False, 'description': 'Downloaded songs'})
+        playlists.insert(1, {'title': 'Downloads', 'playlistId': 'DL', 'thumbnails': [], 'owned': False, 'description': 'Downloaded songs'})
         from ui.utils import is_online
 
         offline = not is_online()
