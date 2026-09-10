@@ -22,7 +22,7 @@ class MediaCardWidget(Gtk.Button):
         self.item_data = item
         self.player = player
         self._compact = False
-        
+
         self.target_size = CARD_SIZE_DEFAULT
 
         self.add_css_class("activatable")
@@ -32,12 +32,13 @@ class MediaCardWidget(Gtk.Button):
         self.set_halign(Gtk.Align.START)
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.main_box.set_size_request(CARD_SIZE_DEFAULT, -1)
         self.set_child(self.main_box)
 
         self.wrapper = Gtk.Box()
         self.wrapper.set_overflow(Gtk.Overflow.HIDDEN)
         self.wrapper.add_css_class("card-cover")
-        self.wrapper.set_halign(Gtk.Align.CENTER)
+        self.wrapper.set_halign(Gtk.Align.START)
         self.wrapper.set_valign(Gtk.Align.CENTER)
 
         if custom_icon:
@@ -52,12 +53,11 @@ class MediaCardWidget(Gtk.Button):
         else:
             thumbnails = item.get("thumbnails", [])
             thumb_url = thumbnails[-1].get("url") if thumbnails else None
-            
+
             self._cover_img = AsyncImage(url=thumb_url, width=CARD_SIZE_DEFAULT, height=CARD_SIZE_DEFAULT, player=player)
             self._cover_img.add_css_class("card-cover-img")
-            
             self._cover_img.set_size_request(-1, -1)
-            
+
             self._cover_img.video_id = (
                 item.get("videoId") or item.get("playlistId") or item.get("browseId")
             )
@@ -70,18 +70,16 @@ class MediaCardWidget(Gtk.Button):
         title = item.get("title", "")
         self.title_label = Gtk.Label(label=title)
         self.title_label.set_halign(Gtk.Align.START)
+        self.title_label.set_xalign(0.0)
+        self.title_label.set_hexpand(True)
+        self.title_label.set_width_chars(1)
         self.title_label.set_ellipsize(Pango.EllipsizeMode.END)
         self.title_label.set_wrap(True)
         self.title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.title_label.set_lines(title_lines)
         self.title_label.set_justify(Gtk.Justification.LEFT)
         self.title_label.set_tooltip_text(title)
-
-        self.title_clamp = Adw.Clamp()
-        self.title_clamp.set_maximum_size(CARD_SIZE_DEFAULT)
-        self.title_clamp.set_tightening_threshold(CARD_SIZE_DEFAULT)
-        self.title_clamp.set_child(self.title_label)
-        self.main_box.append(self.title_clamp)
+        self.main_box.append(self.title_label)
 
         meta = parse_item_metadata(item)
         final_subtitle = subtitle_text if subtitle_text is not None else self._resolve_subtitle(item, meta)
@@ -102,17 +100,14 @@ class MediaCardWidget(Gtk.Button):
             self.subtitle_label.add_css_class("dim-label")
             self.subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
             self.subtitle_label.set_lines(1)
+            self.subtitle_label.set_width_chars(1)
             self.subtitle_label.set_hexpand(True)
             self.subtitle_label.set_halign(Gtk.Align.START)
+            self.subtitle_label.set_xalign(0.0)
             subtitle_box.append(self.subtitle_label)
 
-        self.sub_clamp = None
         if final_subtitle or meta.get("is_explicit"):
-            self.sub_clamp = Adw.Clamp()
-            self.sub_clamp.set_maximum_size(CARD_SIZE_DEFAULT)
-            self.sub_clamp.set_tightening_threshold(CARD_SIZE_DEFAULT)
-            self.sub_clamp.set_child(subtitle_box)
-            self.main_box.append(self.sub_clamp)
+            self.main_box.append(subtitle_box)
 
         if player and item.get("videoId"):
             self._attach_playing_state(item["videoId"])
