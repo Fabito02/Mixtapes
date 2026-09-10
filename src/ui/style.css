@@ -427,6 +427,10 @@ flowboxchild:focus-visible {
   border-radius: 6px;
 }
 
+.playlist-view row {
+    border-radius: 12px;
+}
+
 /* The full cover-bg-active stylesheet now lives in window.py's
    _BLUR_OVERRIDE_CSS constant and is loaded via a CSS provider at
    PRIORITY_USER + 1 — that way it actually overrides whatever the
