@@ -1648,7 +1648,11 @@ class LikeButton(Gtk.Button):
         self.video_id = video_id
         _ACTIVE_LIKE_BUTTONS.add(self)
 
-        self.status = initial_status
+        resolved = None
+        if video_id and hasattr(self.client, "get_known_like_status"):
+            resolved = self.client.get_known_like_status(video_id)
+        
+        self.status = resolved or initial_status or "INDIFFERENT"
 
         self.add_css_class("flat")
         self.add_css_class("circular")
@@ -1677,6 +1681,9 @@ class LikeButton(Gtk.Button):
         old_status = self.status
         new_status = "INDIFFERENT" if old_status == "LIKE" else "LIKE"
 
+        if hasattr(self.client, "set_known_like_status"):
+            self.client.set_known_like_status(self.video_id, new_status)
+
         notify_like_changed(self.video_id, new_status)
 
         player = getattr(self.client, "player", None) or getattr(self, "player", None)
@@ -1689,6 +1696,8 @@ class LikeButton(Gtk.Button):
         def do_rate():
             success = self.client.rate_song(self.video_id, new_status)
             if not success:
+                if hasattr(self.client, "set_known_like_status"):
+                    self.client.set_known_like_status(self.video_id, old_status)
                 GLib.idle_add(notify_like_changed, self.video_id, old_status)
                 if player and hasattr(player, "queue"):
                     for track in player.queue:
@@ -1705,7 +1714,18 @@ class LikeButton(Gtk.Button):
     def set_data(self, video_id, status):
         self.video_id = video_id
         if video_id:
-            self.status = status or "INDIFFERENT"
+            resolved = None
+            if hasattr(self.client, "get_known_like_status"):
+                resolved = self.client.get_known_like_status(video_id)
+            
+            if status in ("LIKE", "DISLIKE"):
+                self.status = status
+                if hasattr(self.client, "set_known_like_status"):
+                    self.client.set_known_like_status(video_id, status)
+            elif resolved:
+                self.status = resolved
+            else:
+                self.status = status or "INDIFFERENT"
         else:
             self.status = status or "INDIFFERENT"
 
