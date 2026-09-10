@@ -495,13 +495,17 @@ class PlayerBar(Gtk.Box):
                 btn.add_css_class("flat")
                 btn.add_css_class("link-btn")
                 btn.set_has_frame(False)
-                
+                btn.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
+
                 lbl = Gtk.Label(label=name)
                 lbl.add_css_class("caption")
                 btn.set_child(lbl)
 
-                if aid and self.on_artist_click:
-                    btn.connect("clicked", lambda _b, a_id=aid, a_name=name: self.on_artist_click(a_id, a_name))
+                if self.on_artist_click:
+                    btn.connect(
+                        "clicked",
+                        lambda _b, a_id=aid, a_name=name: self.on_artist_click(a_id, a_name),
+                    )
 
                 self.artists_box.append(btn)
 
@@ -510,9 +514,24 @@ class PlayerBar(Gtk.Box):
                     sep.add_css_class("caption")
                     self.artists_box.append(sep)
         else:
-            lbl = Gtk.Label(label=artist or "Unknown Artist")
+            name = artist or "Unknown Artist"
+            btn = Gtk.Button()
+            btn.add_css_class("flat")
+            btn.add_css_class("link-btn")
+            btn.set_has_frame(False)
+            btn.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
+
+            lbl = Gtk.Label(label=name)
             lbl.add_css_class("caption")
-            self.artists_box.append(lbl)
+            btn.set_child(lbl)
+
+            if self.on_artist_click:
+                btn.connect(
+                    "clicked",
+                    lambda _b, a_name=name: self.on_artist_click(None, a_name),
+                )
+
+            self.artists_box.append(btn)
 
         if thumbnail_url:
             self.cover_img.video_id = video_id

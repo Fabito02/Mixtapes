@@ -5,7 +5,7 @@ import re
 from api.client import MusicClient
 from ui.utils import (
     AsyncImage, AsyncPicture, LikeButton, parse_item_metadata,
-    attach_playing_highlight, copy_to_clipboard,
+    copy_to_clipboard, bind_weak_signal
 )
 from ui.context_menu import MenuAction, show_item_menu, show_song_menu
 from ui.util_classes import ScrolledWindow
@@ -264,6 +264,27 @@ class ArtistPage(Adw.Bin):
         thread = threading.Thread(target=self._fetch_artist, args=(channel_id,))
         thread.daemon = True
         thread.start()
+
+    def _attach_item_playing_state(self, widget, player, video_id, is_button=True):
+        """Monitors player state and toggles .playing / .flat dynamically."""
+        if not video_id:
+            return
+    
+        def update_state(*args):
+            current_id = getattr(player, "current_video_id", None)
+            is_playing = bool(current_id and current_id == video_id)
+            if is_playing:
+                widget.add_css_class("playing")
+                if is_button:
+                    widget.remove_css_class("flat")
+            else:
+                widget.remove_css_class("playing")
+                if is_button:
+                    widget.add_css_class("flat")
+    
+        update_state()
+        bind_weak_signal(player, "metadata-changed", widget, update_state)
+        bind_weak_signal(player, "state-changed", widget, update_state)
 
     def _fetch_artist(self, channel_id):
         try:
@@ -574,11 +595,8 @@ class ArtistPage(Adw.Bin):
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("song-row")
             row.set_child(box)
-            # Highlight while this track is playing — artist's Top
-            # Songs rows are built ad-hoc (not SongRowWidget) so they
-            # need an explicit subscription.
-            if item.get("videoId"):
-                attach_playing_highlight(box, self.player, item["videoId"])
+
+            self._attach_item_playing_state(row, self.player, item.get("videoId"), is_button=False)
 
             # Thumbnail
             thumbnails = item.get("thumbnails", [])
@@ -850,6 +868,8 @@ class ArtistPage(Adw.Bin):
         )
         card.add_controller(lp)
 
+        self._attach_item_playing_state(card, self.player, item.get("videoId"), is_button=True)
+
         return card
 
     def add_grid_section(self, title, section_dict):
@@ -1080,19 +1100,15 @@ class ArtistPage(Adw.Bin):
             return
 
         if "videoId" in data:
-            # Use full results for queue to ensure all songs are included
-            full_items = (
-                self._artist_data.get("songs", {}).get("results", [])
-                if self._artist_data
-                else getattr(self, "current_songs", [])
-            )
+            queue_tracks = self._build_queue_tracks()
             start_index = 0
-            for i, song in enumerate(full_items):
-                if song.get("videoId") == data.get("videoId"):
+            
+            for i, track in enumerate(queue_tracks):
+                if track.get("videoId") == data.get("videoId"):
                     start_index = i
                     break
 
-            self.player.set_queue(self._build_queue_tracks(), start_index)
+            self.player.set_queue(queue_tracks, start_index)
         else:
             print("No videoId in song data", data)
 
@@ -1144,28 +1160,39 @@ class ArtistPage(Adw.Bin):
 
     def _build_queue_tracks(self):
         queue_tracks = []
-        # Use full results from _artist_data to ensure all songs are added to queue
         songs_section = self._artist_data.get("songs", {}) if self._artist_data else {}
         items = songs_section.get("results", []) or getattr(self, "current_songs", [])
 
         for song in items:
-            artist_name = ", ".join(
-                [a.get("name", "") for a in song.get("artists", [])]
-            )
-            # Fallback for artist name if not in "artists" list
-            if not artist_name:
-                artist_name = self.artist_name
+            raw_artists = song.get("artists", [])
+            artists_list = []
+
+            if isinstance(raw_artists, list) and raw_artists:
+                for a in raw_artists:
+                    if isinstance(a, dict):
+                        a_name = a.get("name") or self.artist_name or "Unknown Artist"
+                        a_id = a.get("id") or (self.channel_id if a_name == self.artist_name else None)
+                        artists_list.append({"name": a_name, "id": a_id})
+                    else:
+                        artists_list.append({"name": str(a), "id": None})
+            else:
+                artists_list = [{"name": self.artist_name or "Unknown Artist", "id": self.channel_id}]
+
+            artist_name = ", ".join([a["name"] for a in artists_list if a.get("name")]) or self.artist_name
 
             thumb = (
                 song.get("thumbnails", [])[-1]["url"]
                 if song.get("thumbnails")
                 else None
             )
+
             queue_tracks.append(
                 {
                     "videoId": song.get("videoId"),
                     "title": song.get("title"),
                     "artist": artist_name,
+                    "artists": artists_list,
+                    "album": song.get("album"),
                     "thumb": thumb,
                 }
             )
