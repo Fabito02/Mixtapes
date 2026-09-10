@@ -12,7 +12,6 @@ class PlayerBar(Gtk.Box):
         self.on_artist_click = on_artist_click
         self.on_queue_click = on_queue_click
         self.on_album_click = on_album_click
-        self.add_css_class("background")
         self.add_css_class("player-bar")
         self._load_css()
 

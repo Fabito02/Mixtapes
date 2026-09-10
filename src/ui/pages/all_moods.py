@@ -38,6 +38,7 @@ class AllMoodsPage(Adw.Bin):
 
         self.list_box = Gtk.ListBox()
         self.list_box.add_css_class("boxed-list")
+        self.list_box.add_css_class("songs-list")
         self.list_box.set_selection_mode(Gtk.SelectionMode.NONE)
 
         for item in self.items:

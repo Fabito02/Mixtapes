@@ -235,6 +235,7 @@ class BasePlaylistPage(Adw.Bin):
 
         self.songs_view = Gtk.ListView(model=self.selection_model, factory=factory)
         self.songs_view.add_css_class("boxed-list")
+        self.songs_view.add_css_class("songs-list")
         # Keyboard activation: Enter/Space on the focused row plays it. The
         # ListView's "activate" signal passes an int position, which
         # on_song_activated already handles (alongside the click-gesture path).

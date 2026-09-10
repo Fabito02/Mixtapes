@@ -271,6 +271,7 @@ class HistoryPage(Adw.Bin):
         listbox = Gtk.ListBox()
         listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         listbox.add_css_class("boxed-list")
+        listbox.add_css_class("songs-list")
         for t in tracks:
             row = self._make_row(t)
             if row is not None:

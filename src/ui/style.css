@@ -453,10 +453,6 @@ flowboxchild:focus-visible {
   padding: 4px;
 }
 
-.expanded-player adwviewswitcher button {
-  border-radius: 8px;
-}
-
 /* Volume Button & Popover */
 .expanded-player .vol-btn {
   opacity: 0.8;
@@ -695,4 +691,63 @@ window > windowhandle,
 /* Liked button */
 .liked-button {
   color: @accent_color;
+}
+
+/* Cover background active state overrides */
+window.cover-bg-active toolbarview,
+window.cover-bg-active overlaysplitview,
+window.cover-bg-active navigation-view,
+window.cover-bg-active stack,
+window.cover-bg-active listview > row,
+window.cover-bg-active listbox > row {
+  background: none;
+  background-color: transparent;
+}
+
+window.cover-bg-active .sidebar-pane {
+  background: none;
+  background-color: alpha(mix(@accent_color, #222222, 0.65), 0.25);
+}
+
+window.cover-bg-active headerbar {
+  background: none;
+  background-color: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+window.cover-bg-active .sidebar,
+window.cover-bg-active .lyrics-split > .sidebar-pane {
+  background: none;
+  background-color: transparent;
+}
+
+window.cover-bg-active bottom-sheet .player-drawer,
+window.cover-bg-active bottom-sheet .queue-panel,
+window.cover-bg-active bottom-sheet .player-bar {
+  background: none;
+  background-color: transparent;
+}
+
+window.cover-bg-active .banner-scrim {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    alpha(@window_bg_color, 0.25) 55%,
+    alpha(@window_bg_color, 0.45) 75%,
+    transparent 100%
+  );
+}
+
+window.cover-bg-active .boxed-list.songs-list,
+window.cover-bg-active .card.home-speed-tile {
+  background-color: alpha(currentColor, 0.1);
+}
+
+window.cover-bg-active .home-speed-tile:hover {
+  background-color: alpha(currentColor, 0.18);
+}
+
+window.cover-bg-active .home-speed-tile:active {
+  background-color: alpha(currentColor, 0.25);
 }

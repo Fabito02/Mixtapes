@@ -270,6 +270,7 @@ class LibraryPage(Adw.Bin):
         self.playlists_list = Gtk.ListBox()
         self.playlists_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.playlists_list.add_css_class("boxed-list")
+        self.playlists_list.add_css_class("songs-list")
         self.playlists_list.connect("row-activated", self.on_playlist_activated)
         playlists_section.append(self.playlists_list)
 
@@ -295,6 +296,7 @@ class LibraryPage(Adw.Bin):
         self.albums_list = Gtk.ListBox()
         self.albums_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.albums_list.add_css_class("boxed-list")
+        self.albums_list.add_css_class("songs-list")
         self.albums_list.connect("row-activated", self.on_album_activated)
         albums_section.append(self.albums_list)
 
@@ -320,6 +322,7 @@ class LibraryPage(Adw.Bin):
         self.artists_list = Gtk.ListBox()
         self.artists_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.artists_list.add_css_class("boxed-list")
+        self.artists_list.add_css_class("songs-list")
         self.artists_list.connect("row-activated", self.on_artist_activated)
         artists_section.append(self.artists_list)
 
@@ -1723,6 +1726,7 @@ class UploadsPage(Gtk.Box):
         self.albums_list = Gtk.ListBox()
         self.albums_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.albums_list.add_css_class("boxed-list")
+        self.albums_list.add_css_class("songs-list")
         self.albums_list.connect("row-activated", self._on_album_activated)
         self.albums_section.append(self.albums_list)
 
@@ -1740,6 +1744,7 @@ class UploadsPage(Gtk.Box):
         self.artists_list = Gtk.ListBox()
         self.artists_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.artists_list.add_css_class("boxed-list")
+        self.artists_list.add_css_class("songs-list")
         self.artists_list.connect("row-activated", self._on_artist_activated)
         self.artists_section.append(self.artists_list)
 

@@ -310,6 +310,7 @@ class CategoryPage(Adw.Bin):
 
         list_box = Gtk.ListBox()
         list_box.add_css_class("boxed-list")
+        list_box.add_css_class("songs-list")
         list_box.set_selection_mode(Gtk.SelectionMode.NONE)
 
         limit = self._section_limits.get(title, 5)

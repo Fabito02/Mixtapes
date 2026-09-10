@@ -28,174 +28,42 @@ if sys.platform == "win32":
 # (800) overwrite them, which is why the player bar / sidebar / mobile
 # view switcher kept rendering opaque despite the rules being there.
 _BLUR_OVERRIDE_CSS = """
-/* Every container painting a flat fill goes transparent. Watch
-   Adw.ToolbarView's .top-bar and .bottom-bar wrappers, named "toolbars"
-   internally, and Adw.OverlaySplitView's pane wrappers. Those sit behind
-   the headerbar, player bar and queue, and keep painting when only the
-   inner widgets are cleared. */
-window.cover-bg-active > windowhandle,
+/* Cover background active state overrides */
 window.cover-bg-active toolbarview,
-window.cover-bg-active toolbarview > .top-bar,
-window.cover-bg-active toolbarview > .bottom-bar,
-window.cover-bg-active toolbars.top-bar,
-window.cover-bg-active toolbars.bottom-bar,
-window.cover-bg-active toolbarview > box,
 window.cover-bg-active overlaysplitview,
-window.cover-bg-active overlaysplitview > box,
-window.cover-bg-active overlaysplitview > .background:not(.sidebar-pane),
-window.cover-bg-active overlaysplitview > .content-pane,
 window.cover-bg-active navigation-view,
-window.cover-bg-active navigation-view > .background,
-window.cover-bg-active navigation-view-page,
-window.cover-bg-active clamp,
-window.cover-bg-active scrolledwindow,
-window.cover-bg-active scrolledwindow > viewport,
 window.cover-bg-active stack,
-window.cover-bg-active toastoverlay,
-window.cover-bg-active listview,
 window.cover-bg-active listview > row,
-window.cover-bg-active listbox,
-window.cover-bg-active listbox > row,
-window.cover-bg-active flowbox,
-window.cover-bg-active view,
-window.cover-bg-active flap,
-window.cover-bg-active leaflet,
-window.cover-bg-active clamp {
-  background-color: transparent;
-  background: none;
-}
-
-/* Headerbar: fully transparent. */
-window.cover-bg-active headerbar,
-window.cover-bg-active headerbar > windowhandle,
-window.cover-bg-active headerbar > windowhandle > box {
+window.cover-bg-active listbox > row {
   background: none;
   background-color: transparent;
-  box-shadow: none;
-  border: none;
 }
 
-/* Mobile view switcher bar. The widget tree is `viewswitcherbar` →
-   `revealer` → internal `actionbar` → `box`. Adwaita styles the
-   actionbar with a flat fill. Wildcard inside the bar to hit it
-   whatever the internal structure. */
-window.cover-bg-active viewswitcherbar,
-window.cover-bg-active viewswitcherbar *,
-window.cover-bg-active viewswitcherbar > actionbar,
-window.cover-bg-active viewswitcherbar actionbar,
-window.cover-bg-active viewswitcherbar actionbar > revealer,
-window.cover-bg-active viewswitcherbar actionbar > revealer > box {
-  background: none;
-  background-color: transparent;
-  border: none;
-  box-shadow: none;
-}
-
-/* Mobile bottom sheet, the full expanded player on mobile. The sheet
-   covers the page underneath, so it stays opaque; clearing it lets the
-   playlist and the nav bar show through the player. Paint the panel
-   wash as a gradient layer over an opaque background-color instead, so
-   the whole sheet including the drag-handle strip is one surface.
-
-   The node is `bottom-sheet`, not `bottomsheet`. The old selectors read
-   `bottomsheet` and matched nothing. */
-window.cover-bg-active bottom-sheet > sheet {
-    background: none;
-    background-color: @window_bg_color;
-}
-
-/* Player bar, queue panel, expanded player are Gtk.Box widgets carrying
-   both libadwaita .background AND their own class. Match both for
-   specificity, and use lower alpha so the blur reads through. The
-   sidebar itself goes fully transparent. The surrounding .sidebar-pane
-   wrapper carries its tint, so the two read as one continuous panel
-   matching the player bar. */
-window.cover-bg-active .background.player-bar,
-window.cover-bg-active .background.queue-panel,
-window.cover-bg-active .background.player-drawer,
-window.cover-bg-active .player-bar,
-window.cover-bg-active .queue-panel,
-window.cover-bg-active .player-drawer,
 window.cover-bg-active .sidebar-pane {
   background: none;
-  background-color: @blur_panel_bg;
+  background-color: alpha(mix(@accent_color, #4a4a4a, 0.75), 0.18);
 }
 
-window.cover-bg-active .background.sidebar,
-window.cover-bg-active .sidebar {
+window.cover-bg-active headerbar {
+  background: none;
+  background-color: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+window.cover-bg-active .sidebar,
+window.cover-bg-active .lyrics-split > .sidebar-pane {
   background: none;
   background-color: transparent;
 }
 
-/* Inside the sheet the surface above already carries the wash. Anything
-   painting its own on top would stack: the queue lives inside the
-   expanded player, so the Queue tab came out a different shade from the
-   Player tab. QueuePanel carries `.background` as well as
-   `.queue-panel`, so the `.background.queue-panel` form needs listing
-   too or it out-specifies this reset. Desktop keeps its washes, where
-   the expanded player sits in the main stack over the blur rather than
-   over the page. */
-window.cover-bg-active bottom-sheet .background.player-drawer,
-window.cover-bg-active bottom-sheet .background.queue-panel,
-window.cover-bg-active bottom-sheet .background.player-bar,
 window.cover-bg-active bottom-sheet .player-drawer,
 window.cover-bg-active bottom-sheet .queue-panel,
-window.cover-bg-active bottom-sheet .player-bar,
-window.cover-bg-active bottom-sheet .queue-header {
+window.cover-bg-active bottom-sheet .player-bar {
   background: none;
   background-color: transparent;
 }
 
-/* The desktop cover view's lyrics column is an Adw.OverlaySplitView with
-   the `.lyrics-split` class. Override the generic .sidebar-pane tint
-   above so the lyrics column reads as part of the cover background
-   rather than a darker panel floating in front of it. */
-window.cover-bg-active .lyrics-split > .sidebar-pane,
-window.cover-bg-active .lyrics-split > .sidebar-pane > .background {
-  background: none;
-  background-color: transparent;
-}
-
-window.cover-bg-active .queue-header {
-  background-color: @blur_panel_bg_weak;
-}
-
-/* Cards and boxed-lists. A currentColor tint instead of @card_bg_color,
-   so they read bright on a dark blur and subtle on a light one. Matches
-   the .home-speed-tile quick-picks look instead of a muddy gray wash. */
-window.cover-bg-active .boxed-list,
-window.cover-bg-active .card {
-  background-color: alpha(currentColor, 0.1);
-}
-
-window.cover-bg-active .home-speed-tile {
-  background-color: alpha(currentColor, 0.1);
-}
-
-window.cover-bg-active .home-speed-tile:hover {
-  background-color: alpha(currentColor, 0.18);
-}
-
-window.cover-bg-active .home-speed-tile:active {
-  background-color: alpha(currentColor, 0.25);
-}
-
-/* Cards inside floating dialogs (Adw.PreferencesDialog etc.) and
-   popovers do NOT sit on the blurred cover bg. They sit on the dialog's
-   own surface, where the translucent treatment looks washed out and
-   inconsistent. Restore full opacity inside dialogs and popovers. Higher
-   specificity than the rule above, so this one wins. */
-window.cover-bg-active dialog .boxed-list,
-window.cover-bg-active dialog .card,
-window.cover-bg-active popover .boxed-list,
-window.cover-bg-active popover .card {
-  background-color: @card_bg_color;
-}
-
-/* Artist banner scrim in blur mode. Darken behind the artist name and
-   play button, 60 to 75% down. Fade back to transparent at the bottom,
-   where FadeBottomBin masks the image to alpha 0; a scrim still
-   translucent there brings back the colored band the mask removes. */
 window.cover-bg-active .banner-scrim {
   background: linear-gradient(
     to bottom,
@@ -206,35 +74,17 @@ window.cover-bg-active .banner-scrim {
   );
 }
 
-/* Context menus keep regular text. A popover is a CSS child of the row
-   it is parented to, so it inherits the color above. */
-window.cover-bg-active box.song-row.playing popover label,
-window.cover-bg-active box.song-row.playing popover modelbutton,
-window.cover-bg-active list row.playing popover label,
-window.cover-bg-active list row.playing popover modelbutton,
-window.cover-bg-active .queue-row.playing popover label,
-window.cover-bg-active .queue-row.playing popover modelbutton {
-  color: @popover_fg_color;
+window.cover-bg-active .boxed-list.songs-list,
+window.cover-bg-active .card.home-speed-tile {
+  background-color: alpha(currentColor, 0.1);
 }
 
-/* Queue rows lose libadwaita's default :hover tint to the
-   "all listview rows transparent" rule above. Restore a subtle hover so
-   the row responds to the pointer in blur mode. @view_fg_color gives
-   theme-neutral contrast, the same approach as the .playing rule. Lower
-   opacity keeps it weaker than the playing highlight. */
-window.cover-bg-active .queue-row:hover {
-  background-color: alpha(@view_fg_color, 0.08);
-}
-window.cover-bg-active .queue-row.playing:hover {
-  background-color: alpha(@view_fg_color, 0.18);
+window.cover-bg-active .home-speed-tile:hover {
+  background-color: alpha(currentColor, 0.18);
 }
 
-/* Same fix for lyric lines. They are tap-to-seek and need the pointer
-   affordance, but the catch-all transparency above kills
-   the base hover defined in style.css. Slightly lighter than queue
-   rows since lyrics are content, not a list of actions. */
-window.cover-bg-active .lyrics-line:hover {
-  background-color: alpha(@view_fg_color, 0.06);
+window.cover-bg-active .home-speed-tile:active {
+  background-color: alpha(currentColor, 0.25);
 }
 """
 
@@ -3470,6 +3320,7 @@ class MainWindow(Adw.ApplicationWindow):
             entry = Adw.PasswordEntryRow(title="User Token")
             listbox = Gtk.ListBox()
             listbox.add_css_class("boxed-list")
+            listbox.add_css_class("songs-list")
             listbox.set_selection_mode(Gtk.SelectionMode.NONE)
             listbox.append(entry)
 

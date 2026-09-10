@@ -562,6 +562,7 @@ class ArtistPage(Adw.Bin):
 
         list_box = Gtk.ListBox()
         list_box.add_css_class("boxed-list")
+        list_box.add_css_class("songs-list")
         list_box.set_selection_mode(Gtk.SelectionMode.NONE)
         list_box.connect("row-activated", self.on_song_activated)
 
