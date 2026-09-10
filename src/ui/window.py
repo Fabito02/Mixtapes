@@ -80,6 +80,10 @@ window.cover-bg-active .home-speed-tile:hover {
 window.cover-bg-active .home-speed-tile:active {
   background-color: alpha(currentColor, 0.25);
 }
+
+window.cover-bg-active listview > row:hover .queue-row {
+  background-color: alpha(currentColor, 0.1);
+}
 """
 
 
