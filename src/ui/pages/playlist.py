@@ -472,7 +472,6 @@ class PlaylistPage(Adw.Bin):
         row = Gtk.Button()
         row.add_css_class("song-row")
         row.add_css_class("song-row-button")
-        row.add_css_class("activatable")
         row.add_css_class("flat")
         row.set_hexpand(True)
         row.set_focus_on_click(False)

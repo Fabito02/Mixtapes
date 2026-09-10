@@ -21,30 +21,6 @@ if sys.platform == "win32":
     except ImportError:
         pass
 
-
-# The luminance band cover_effects normalizes the backdrop into:
-# typical luminance, and the end worst for text.
-BLUR_BACKDROP = {           # is_dark -> (typical, worst-for-text)
-    True: (0.025, 0.14),
-    False: (0.55, 0.35),
-}
-# The playing row lifts off the backdrop by a fixed contrast ratio, not
-# a fixed color, so it looks equally strong in both schemes. A pinned
-# color gave a white band in light mode and nothing in dark.
-BLUR_ROW_SEPARATION = 1.30
-BLUR_ROW_OPACITY = 0.5
-# Band edges are percentiles. One point of headroom covers the tail.
-BLUR_LABEL_HEADROOM = 1.0
-# Damp the highlight's chroma. Equal luminance contrast is not equal
-# apparent strength, and dark mode keeps far more chroma.
-BLUR_ROW_TINT = 0.4
-# Panels (player bar, queue, sidebar) recede instead of lifting.
-# alpha(@window_bg_color, 0.35) sat above the backdrop in light mode and
-# below it in dark: a 1.41 lift versus 1.04.
-BLUR_PANEL_SEPARATION = 1.18
-BLUR_PANEL_OPACITY = 0.35
-BLUR_PANEL_TINT = 0.25
-
 # CSS that makes the chrome translucent when blurred-cover-bg is active.
 # Loaded via a Gtk.CssProvider at PRIORITY_USER + 1 so it actually wins
 # the cascade against a user's ~/.config/gtk-4.0/gtk.css. Putting these
@@ -579,7 +555,6 @@ class MainWindow(Adw.ApplicationWindow):
         # (typical, worst-for-text) luminance of the blurred backdrop
         # currently painted, measured by cover_effects; None when there
         # isn't one.
-        self._blur_backdrop = None
         self._refresh_derived_colors()
         self._last_cover_url = None
         # Hook metadata for the appearance pipeline (blur + dynamic accent).
@@ -832,16 +807,11 @@ class MainWindow(Adw.ApplicationWindow):
     def _update_blurred_background(self, thumb_url):
         from ui.cover_effects import get_blurred_cover
 
-        def _apply(path, backdrop):
+        def _apply(path, *args):
             if not path or not os.path.exists(path):
-                # Fetch failed, or the cover has no color to show.
-                # Drop back to opaque chrome: translucent chrome over a
-                # flat gray field looks like mismatched patches.
-                self._blur_backdrop = None
                 self._deactivate_cover_bg()
                 self._refresh_derived_colors()
                 return False
-            self._blur_backdrop = backdrop
             self._set_blurred_background_css(path)
             self._refresh_derived_colors()
             return False
@@ -852,10 +822,12 @@ class MainWindow(Adw.ApplicationWindow):
         from pathlib import Path
         url = Path(path).as_uri()
         bg_rule = (
-            "window.cover-bg-active {\n"
+            "\nwindow.cover-bg-active, "
+            "window.cover-bg-active.background {\n"
             f'    background-image: url("{url}");\n'
             "    background-size: cover;\n"
             "    background-position: center;\n"
+            "    background-repeat: no-repeat;\n"
             "}\n"
         )
         try:
@@ -864,14 +836,7 @@ class MainWindow(Adw.ApplicationWindow):
             print(f"[appearance] bg CSS load failed: {e}")
 
     def _clear_blurred_background(self):
-        had_backdrop = self._blur_backdrop is not None
-        self._blur_backdrop = None
-        try:
-            self._dynamic_bg_css.load_from_string("")
-        except Exception:
-            pass
-        if had_backdrop:
-            self._refresh_derived_colors()
+        self._dynamic_bg_css.load_from_string("")
 
     def _update_dynamic_accent(self, thumb_url):
         from ui.cover_effects import get_dominant_color
@@ -1043,52 +1008,20 @@ class MainWindow(Adw.ApplicationWindow):
         return solid, standalone, view_bg
 
     def _refresh_derived_colors(self):
-        """Recompute the app color tokens needing to stay legible.
-
-        `@playing_fg` matters most. The old `hsl(from @accent_color h
-        100% 80%)` pinned lightness at 80%, fine on dark themes and
-        around 1.1:1 on light ones. Derive against the background the
-        label lands on instead.
-        """
         solid, standalone, view_bg = self._accent_in_force()
         row_bg = color_utils.mix(view_bg, solid, 0.18)
         target = self._contrast_target()
         fg = color_utils.ensure_contrast(standalone, row_bg, target)
 
-        # Blurred-background mode. The row lifts off the normalized
-        # backdrop by BLUR_ROW_SEPARATION, and the label is checked
-        # against the composite.
         is_dark = self._is_dark()
-        # Measured off the blur on screen. The constants cover the
-        # moment before it lands.
-        typical, worst = self._blur_backdrop or BLUR_BACKDROP[is_dark]
-        lightness, chroma, hue = color_utils.rgb_to_oklch(solid)
-        overlay = color_utils.overlay_for_contrast(
-            color_utils.gray(typical),
-            color_utils.oklch_to_rgb(lightness, chroma * BLUR_ROW_TINT, hue),
-            BLUR_ROW_OPACITY, BLUR_ROW_SEPARATION,
-        )
-        panel = color_utils.overlay_for_contrast(
-            color_utils.gray(typical),
-            color_utils.oklch_to_rgb(lightness, chroma * BLUR_PANEL_TINT, hue),
-            BLUR_PANEL_OPACITY, BLUR_PANEL_SEPARATION, lighter=False,
-        )
-
-        def rgba(color, alpha):
-            r, g, b = (
-                int(round(min(1.0, max(0.0, c)) * 255)) for c in color
-            )
-            return f"rgba({r}, {g}, {b}, {alpha})"
+        panel_color = "rgba(18, 18, 20, 0.55)" if is_dark else "rgba(255, 255, 255, 0.65)"
+        panel_color_weak = "rgba(18, 18, 20, 0.35)" if is_dark else "rgba(255, 255, 255, 0.45)"
 
         try:
             self._derived_css.load_from_string(
                 f"@define-color playing_fg {color_utils.to_css(fg)};\n"
-                f"@define-color playing_surface_over_blur "
-                f"{rgba(overlay, BLUR_ROW_OPACITY)};\n"
-                f"@define-color blur_panel_bg "
-                f"{rgba(panel, BLUR_PANEL_OPACITY)};\n"
-                f"@define-color blur_panel_bg_weak "
-                f"{rgba(panel, BLUR_PANEL_OPACITY * 0.7)};\n"
+                f"@define-color blur_panel_bg {panel_color};\n"
+                f"@define-color blur_panel_bg_weak {panel_color_weak};\n"
             )
         except Exception as e:
             print(f"[appearance] derived color CSS load failed: {e}")

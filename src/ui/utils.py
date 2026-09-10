@@ -210,7 +210,7 @@ def _get_fetch_executor():
         if _FETCH_EXECUTOR is None:
             from concurrent.futures import ThreadPoolExecutor
             _FETCH_EXECUTOR = ThreadPoolExecutor(
-                max_workers=8, thread_name_prefix="muse-img"
+                max_workers=6, thread_name_prefix="muse-img"
             )
     return _FETCH_EXECUTOR
 

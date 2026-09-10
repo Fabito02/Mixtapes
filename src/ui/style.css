@@ -109,7 +109,6 @@ listview.playlist-view > row:focus:selected {
   background: none;
   border: none;
   box-shadow: none;
-  outline: none;
 }
 
 /* Keyboard focus ring for song rows. The reset above clears the row's own
@@ -363,17 +362,12 @@ flowboxchild {
   border-radius: 8px;
 }
 
-flowboxchild:focus {
-  outline: none;
-}
-
 /* Keyboard focus ring for grid tiles (library cards, quick-pick tiles).
    Placed after the :focus reset so it wins for keyboard focus only; a plain
    mouse :focus stays ringless. Follows the child's 8px radius and insets so
    it isn't clipped by neighbouring tiles. */
 flowboxchild:focus-visible {
   outline: 2px solid @accent_color;
-  outline-offset: -2px;
 }
 
 .home-speed-cover {
