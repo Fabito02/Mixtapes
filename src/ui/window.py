@@ -784,9 +784,12 @@ class MainWindow(Adw.ApplicationWindow):
                 @define-color theme_selected_bg_color @accent_bg_color;
                 """
 
+        accent_bg = color_utils.to_css(solid)
+        accent_fg = color_utils.to_css(standalone)
+        
         css = f"""
-        @define-color accent_bg_color {accent_color};
-        @define-color accent_color {standalone};
+        @define-color accent_bg_color {accent_bg};
+        @define-color accent_color {accent_fg};
 
         {tint_vars}
 
