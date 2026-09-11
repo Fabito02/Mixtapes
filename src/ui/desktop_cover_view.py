@@ -51,6 +51,7 @@ class DesktopCoverView(Adw.Bin):
         self.on_artist_click = on_artist_click
         self.on_queue_click = on_queue_click
         self._scroll_seek_id = None
+        self._is_buffering_spinner = False
         self._load_css()
 
         toolbar = Adw.ToolbarView()
@@ -235,15 +236,13 @@ class DesktopCoverView(Adw.Bin):
         self._play_stack = Gtk.Stack()
         self._play_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self._play_stack.set_transition_duration(150)
-        self._play_stack.set_valign(Gtk.Align.CENTER)
-        self._play_stack.set_halign(Gtk.Align.CENTER)
 
         self._play_icon = Gtk.Image.new_from_icon_name("media-playback-start-symbolic")
         self._play_icon.set_pixel_size(20)
         self._play_stack.add_named(self._play_icon, "icon")
 
         self._play_spinner = Adw.Spinner()
-        self._play_spinner.set_size_request(20, 20)
+        self._play_spinner.set_size_request(24, 24)
         self._play_stack.add_named(self._play_spinner, "spinner")
 
         self.play_btn.set_child(self._play_stack)
@@ -564,6 +563,14 @@ class DesktopCoverView(Adw.Bin):
         self.current_time_label.set_label(self._format_time(pos))
         self.total_time_label.set_label(self._format_time(dur))
 
+        if self._is_buffering_spinner and dur > 0:
+            if self.player.get_state_string() == "playing":
+                self._is_buffering_spinner = False
+                self._play_stack.set_visible_child_name("icon")
+                self._play_icon.set_from_icon_name("media-playback-pause-symbolic")
+                self.play_btn.set_sensitive(True)
+                self.scale.set_sensitive(True)
+
     def on_state_changed(self, player, state):
         self.update_visualizer_state()
         if state == "loading":
@@ -573,12 +580,23 @@ class DesktopCoverView(Adw.Bin):
             self.total_time_label.set_label("0:00")
             self._play_stack.set_visible_child_name("spinner")
             self.play_btn.set_sensitive(False)
+            self._is_buffering_spinner = True
         elif state == "playing":
-            self._play_icon.set_from_icon_name("media-playback-pause-symbolic")
-            self._play_stack.set_visible_child_name("icon")
-            self.play_btn.set_sensitive(True)
-            self.scale.set_sensitive(self.player.duration > 0)
+            if self.player.duration <= 0:
+                self._is_buffering_spinner = True
+                self._play_stack.set_visible_child_name("spinner")
+                self.play_btn.set_sensitive(False)
+                self.scale.set_sensitive(False)
+            else:
+                self._is_buffering_spinner = False
+                self._play_icon.set_from_icon_name("media-playback-pause-symbolic")
+                self._play_stack.set_visible_child_name("icon")
+                self.play_btn.set_sensitive(True)
+                self.scale.set_sensitive(True)
         elif state in ("paused", "stopped"):
+            if self._is_buffering_spinner and self.player.duration <= 0:
+                return
+            self._is_buffering_spinner = False
             self._play_icon.set_from_icon_name("media-playback-start-symbolic")
             self._play_stack.set_visible_child_name("icon")
             self.play_btn.set_sensitive(True)
@@ -854,3 +872,9 @@ class DesktopCoverView(Adw.Bin):
             self.like_btn.set_visible(False)
 
         self._refresh_more_menu()
+
+        if video_id and self.player.duration <= 0:
+            self._is_buffering_spinner = True
+            self._play_stack.set_visible_child_name("spinner")
+            self.play_btn.set_sensitive(False)
+            self.scale.set_sensitive(False)
