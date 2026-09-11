@@ -5,7 +5,12 @@ from api.client import MusicClient
 from ui.context_menu import MenuAction, show_item_menu
 from ui.util_classes import ScrolledWindow
 from ui.utils import AsyncImage, copy_to_clipboard, parse_item_metadata
-from ui.widgets.media_card import MediaCardWidget
+from ui.widgets.media_card import (
+    MediaCardWidget,
+    CardWrapLayout,
+    GRID_SPACING,
+    GRID_LINE_SPACING,
+)
 
 class DiscographyPage(Adw.Bin):
     __gsignals__ = {
@@ -45,11 +50,15 @@ class DiscographyPage(Adw.Bin):
         self.content_box.set_margin_end(24)
 
         self.flow_box = Adw.WrapBox()
+        # Same layout as the library grid. Without it the wrap was decided
+        # from the cards' desktop size, so a compact window could show one
+        # column where two fit and only sort itself out on the next resize.
+        self.flow_box.set_layout_manager(CardWrapLayout())
         self.flow_box.set_valign(Gtk.Align.START)
         self.flow_box.set_align(0.5)
-        self.flow_box.set_line_homogeneous(True)
-        self.flow_box.set_line_spacing(24)
-        self.flow_box.set_child_spacing(24)
+        self.flow_box.set_line_homogeneous(False)
+        self.flow_box.set_line_spacing(GRID_LINE_SPACING)
+        self.flow_box.set_child_spacing(GRID_SPACING)
 
         self.content_box.append(self.flow_box)
 
@@ -83,15 +92,11 @@ class DiscographyPage(Adw.Bin):
             self.content_box.set_spacing(12)
             self.content_box.set_margin_start(12)
             self.content_box.set_margin_end(12)
-            self.flow_box.set_line_spacing(12)
-            self.flow_box.set_child_spacing(12)
         else:
             self.remove_css_class("compact")
             self.content_box.set_spacing(16)
             self.content_box.set_margin_start(24)
             self.content_box.set_margin_end(24)
-            self.flow_box.set_line_spacing(24)
-            self.flow_box.set_child_spacing(24)
     
         child = self.flow_box.get_first_child()
         while child:

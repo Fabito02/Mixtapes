@@ -10,7 +10,11 @@ from ui.utils import (
 from ui.context_menu import show_item_menu
 from ui.widgets.scroll_box import HorizontalScrollBox
 from ui.util_classes import ScrolledWindow
-from ui.widgets.media_card import MediaCardWidget
+from ui.widgets.media_card import (
+    MediaCardWidget,
+    STRIP_SPACING,
+    STRIP_SPACING_COMPACT,
+)
 
 SPEED_TILE_COVER = 56
 SONG_THUMB_SIZE = 56
@@ -366,8 +370,11 @@ class HomePage(Adw.Bin):
             self.feed_box.set_spacing(28)
             self.feed_box.set_margin_start(12)
             self.feed_box.set_margin_end(12)
-        for strip in getattr(self, "_card_strips", []):
-            strip.set_spacing(8 if compact else 16)
+        self._card_strips = [
+            s for s in getattr(self, "_card_strips", []) if s.get_parent() is not None
+        ]
+        for strip in self._card_strips:
+            strip.set_spacing(STRIP_SPACING_COMPACT if compact else STRIP_SPACING)
         self._propagate_compact(self.feed_box, compact)
 
     def _propagate_compact(self, widget, compact):
@@ -771,7 +778,12 @@ class HomePage(Adw.Bin):
 
     def _add_card_strip(self, section_box, items, bucket=None, section_title=""):
         scroll_box = HorizontalScrollBox()
-        h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        root = self.get_root()
+        compact = bool(getattr(root, "_is_compact", self._compact))
+        h_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=STRIP_SPACING_COMPACT if compact else STRIP_SPACING,
+        )
         h_box.set_margin_bottom(16)
         if not hasattr(self, "_card_strips"):
             self._card_strips = []

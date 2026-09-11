@@ -6,7 +6,12 @@ from api.client import MusicClient
 from ui.utils import show_toast
 from ui.context_menu import MenuAction, show_item_menu
 from ui.util_classes import ScrolledWindow
-from ui.widgets.media_card import MediaCardWidget
+from ui.widgets.media_card import (
+    MediaCardWidget,
+    CardWrapLayout,
+    GRID_SPACING,
+    GRID_LINE_SPACING,
+)
 
 LIBRARY_VIEW_MODES = ("list", "grid")
 DEFAULT_LIBRARY_VIEW_MODE = "grid"
@@ -51,14 +56,18 @@ def _set_library_view_mode_pref(mode):
 
 def _make_flow_grid():
     """Shared WrapBox config matching DiscographyPage's card grid.
-    Spacing is 0 so the gutter comes purely from each card's own margins
-    + the `.card` wrapper padding."""
+    CardWrapLayout widens the cards so the columns share the row width
+    instead of leaving the wrap remainder on the right."""
     grid = Adw.WrapBox()
+    grid.set_layout_manager(CardWrapLayout())
     grid.set_valign(Gtk.Align.START)
     grid.set_align(0)
-    grid.set_line_homogeneous(True)
-    grid.set_line_spacing(24)
-    grid.set_child_spacing(24)
+    # Rows hug their own content. Homogeneous lines pad every row out to the
+    # tallest card in the whole grid, which is what made the gaps between rows
+    # read as twice the gaps between columns.
+    grid.set_line_homogeneous(False)
+    grid.set_line_spacing(GRID_LINE_SPACING)
+    grid.set_child_spacing(GRID_SPACING)
     grid.set_visible(False)
     return grid
 

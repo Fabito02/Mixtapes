@@ -384,34 +384,30 @@ flowboxchild:focus-visible {
   padding: 10px;
 }
 
+/* Floors only. MediaCardWidget sets the real cover size with a size request,
+   which a grid may pull under 150 to fit one more column per row. GTK takes
+   the larger of the two, so anything near 150 here blocks that. */
 .card-cover {
   border-radius: 12px;
   margin-bottom: 8px;
-  min-width: 150px;
-  min-height: 150px;
-}
-
-.compact .card-cover {
-  min-width: 130px;
-  min-height: 130px;
+  min-width: 100px;
+  min-height: 100px;
 }
 
 .card-cover-img {
-  min-width: 150px;
-  min-height: 150px;
+  min-width: 100px;
+  min-height: 100px;
   -gtk-icon-size: 150px;
 }
 
 .compact .card-cover-img {
-  min-width: 130px;
-  min-height: 130px;
   -gtk-icon-size: 130px;
 }
 
 .card-download-icon {
     border-radius: 12px;
-    min-width: 150px;
-    min-height: 150px;
+    min-width: 100px;
+    min-height: 100px;
     background: linear-gradient(
       135deg,
       mix(var(--accent-bg-color), white, 0.5) 0%,
@@ -423,8 +419,6 @@ flowboxchild:focus-visible {
 }
 
 .compact .card-download-icon {
-    min-width: 130px;
-    min-height: 130px;
     -gtk-icon-size: 60px;
 }
 

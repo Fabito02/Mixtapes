@@ -9,7 +9,11 @@ from ui.utils import (
 )
 from ui.context_menu import MenuAction, show_item_menu, show_song_menu
 from ui.util_classes import ScrolledWindow
-from ui.widgets.media_card import MediaCardWidget
+from ui.widgets.media_card import (
+    MediaCardWidget,
+    STRIP_SPACING,
+    STRIP_SPACING_COMPACT,
+)
 
 class ArtistPage(Adw.Bin):
     __gsignals__ = {
@@ -24,6 +28,8 @@ class ArtistPage(Adw.Bin):
         self.artist_name = ""
         self.current_songs = []
         self._artist_data = None
+        self._compact = False
+        self._card_strips = []
         self._section_limits = {
             "Top Songs": 5,
             "Albums": 10,
@@ -835,7 +841,16 @@ class ArtistPage(Adw.Bin):
 
         scrolled = HorizontalScrollBox()
 
-        inner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        # From the root, not self._compact: a page opened while the window is
+        # already narrow never gets a set_compact_mode call, so its own flag
+        # is still False while its cards have sized themselves compact.
+        root = self.get_root()
+        compact = bool(getattr(root, "_is_compact", self._compact))
+        inner_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=STRIP_SPACING_COMPACT if compact else STRIP_SPACING,
+        )
+        self._card_strips.append(inner_box)
         scrolled.set_content(inner_box)
         box.append(scrolled)
 
@@ -1216,6 +1231,13 @@ class ArtistPage(Adw.Bin):
     def set_compact_mode(self, compact):
         self._compact = compact
         self._propagate_compact(self.content_box, compact)
+
+        # Strips tighten on small screens, the same as home's do.
+        self._card_strips = [
+            s for s in getattr(self, "_card_strips", []) if s.get_parent() is not None
+        ]
+        for strip in self._card_strips:
+            strip.set_spacing(STRIP_SPACING_COMPACT if compact else STRIP_SPACING)
 
         if compact:
             self.add_css_class("compact")

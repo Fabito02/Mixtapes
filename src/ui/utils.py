@@ -929,6 +929,20 @@ class AsyncImage(Gtk.Image):
         current_url = self.url
         if not current_url:
             return
+        # An image that has finished loading keeps its art. Dropping it here
+        # cost a placeholder frame and a fresh disk read on the way back,
+        # since IMG_CACHE only holds MAX_CACHE_SIZE pixbufs and a breakpoint
+        # hides and reparents whole views at once. Anything still in flight
+        # falls through and reloads on the next map, as before.
+        future = self._active_future
+        settled = (
+            not self._is_placeholder
+            and self.get_paintable() is not None
+            and self._pending_fetch is None
+            and (future is None or future.done())
+        )
+        if settled:
+            return
         self.cancel_and_unload()
         self.set_from_icon_name("image-missing-symbolic")
         self.load_url(current_url)
@@ -958,10 +972,12 @@ class AsyncImage(Gtk.Image):
         if self._base_size is None or self._base_size > 80:
             return
         new = 44 if compact else self._base_size
-        if new == self.target_w:
+        if new == self.get_pixel_size():
             return
-        self.target_w = new
-        self.target_h = new
+        # Display size only. target_w feeds get_high_res_url, and both the
+        # memory and disk caches are keyed by URL, so moving it refetches the
+        # thumbnail on the next remap. That lands exactly on the breakpoint,
+        # where the view swap remaps every row at once.
         self.set_pixel_size(new)
         self.queue_resize()
 
@@ -1283,6 +1299,20 @@ class AsyncPicture(Gtk.Picture):
     def _on_unmap(self, widget):
         current_url = self.url
         if not current_url:
+            return
+        # An image that has finished loading keeps its art. Dropping it here
+        # cost a placeholder frame and a fresh disk read on the way back,
+        # since IMG_CACHE only holds MAX_CACHE_SIZE pixbufs and a breakpoint
+        # hides and reparents whole views at once. Anything still in flight
+        # falls through and reloads on the next map, as before.
+        future = self._active_future
+        settled = (
+            not self._is_placeholder
+            and self.get_paintable() is not None
+            and self._pending_fetch is None
+            and (future is None or future.done())
+        )
+        if settled:
             return
         self.cancel_and_unload()
         self.set_from_icon_name("image-missing-symbolic")
