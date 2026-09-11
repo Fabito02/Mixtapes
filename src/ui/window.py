@@ -2430,8 +2430,9 @@ class MainWindow(Adw.ApplicationWindow):
             with open(_prefs_path, "w") as f:
                 _json.dump(_prefs, f)
 
-            if hasattr(self, "desktop_cover_view") and self.desktop_cover_view:
-                self.desktop_cover_view.update_visualizer_state(on)
+            viz = self._get_visualizer()
+            if viz is not None:
+                viz.set_visible(on)
 
             bars_row.set_sensitive(on)
             smooth_row.set_sensitive(on)
