@@ -4132,11 +4132,16 @@ class MainWindow(Adw.ApplicationWindow):
         self._apply_window_controls_position()
 
     def _on_player_bar_visibility(self, player, *args):
-        if not getattr(self, "_is_compact", False) and self.main_stack.get_visible_child_name() == "cover":
+        has_queue = len(self.player.queue) > 0
+
+        if (
+            has_queue
+            and not getattr(self, "_is_compact", False)
+            and self.main_stack.get_visible_child_name() == "cover"
+        ):
             self.player_bar_revealer.set_reveal_child(False)
             return
 
-        has_queue = len(self.player.queue) > 0
         self.player_bar_revealer.set_reveal_child(has_queue)
 
         if not has_queue:
