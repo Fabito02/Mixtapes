@@ -91,7 +91,34 @@ class CardWrapLayout(Adw.WrapLayout):
             child = child.get_next_sibling()
 
 
+class CardBinLayout(Gtk.BinLayout):
+    """Bin layout that holds a card to the width it was given.
+
+    Measured against a known height, a wrapping title label asks for more
+    width than the card's size request, and a strip with room to spare hands
+    it over, pulling a short row of cards apart. A card is only ever as wide
+    as the size set on it, so its natural width is its minimum.
+
+    It lives on the layout manager because gtk_widget_measure() asks the
+    layout manager and never reaches the widget's own measure vfunc.
+    """
+
+    __gtype_name__ = "MuseCardBinLayout"
+
+    def do_measure(self, widget, orientation, for_size):
+        minimum, natural, min_base, nat_base = Gtk.BinLayout.do_measure(
+            self, widget, orientation, for_size
+        )
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            # Baselines are vertical-only; chaining up hands back whatever the
+            # bin layout measured and GTK warns about it.
+            return minimum, minimum, -1, -1
+        return minimum, natural, min_base, nat_base
+
+
 class MediaCardWidget(Gtk.Button):
+    __gtype_name__ = "MuseMediaCardWidget"
+
     def __init__(
         self,
         item,
@@ -114,6 +141,8 @@ class MediaCardWidget(Gtk.Button):
         self._grid_size = None
         self.icon_box = None
         self._cover_icon = None
+
+        self.set_layout_manager(CardBinLayout())
 
         self.add_css_class("activatable")
         self.add_css_class("artist-horizontal-item")
