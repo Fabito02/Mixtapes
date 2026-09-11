@@ -349,10 +349,9 @@ listview.playlist-view > row:disabled {
   background-image: none;
 }
 
-/* In compact (mobile) layout the page surfaces more tiles per screen
-   if each one is shorter. The 44 px cover already shrinks via
-   AsyncImage.set_compact, so the row is comfortable at ~52 px tall
-   with tighter padding. */
+/* In compact (mobile) layout a tile is one full-width row, so it can hold a
+   whole title on one line and stay short. The 44 px cover comes from
+   AsyncImage.set_compact, which puts the row at ~56 px with this padding. */
 .compact .home-speed-tile {
   padding: 6px;
 }

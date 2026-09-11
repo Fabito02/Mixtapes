@@ -18,6 +18,30 @@ from ui.widgets.media_card import (
 
 SPEED_TILE_COVER = 56
 SONG_THUMB_SIZE = 56
+# AsyncImage.set_compact drops a thumbnail to 44 px on mobile.
+SPEED_TILE_COVER_COMPACT = 44
+SPEED_TILE_WIDTH = 280
+# A mobile tile fills the viewport up to this width and then stops growing,
+# so widening the window adds columns instead of fattening the tiles.
+SPEED_TILE_WIDTH_COMPACT = 320
+# Floor for a window narrower than the tile, where fitting beats filling.
+SPEED_TILE_WIDTH_COMPACT_MIN = 200
+# Cover spacing plus the tile padding the text column sits inside.
+SPEED_TILE_TEXT_INSET = 26
+SPEED_TILE_TEXT_INSET_COMPACT = 22
+# How much of the next column stays showing past the right edge on mobile,
+# which is what tells the reader the strip scrolls.
+SPEED_DIAL_PEEK = 32
+
+SPEED_DIAL_ROWS = 3
+SPEED_DIAL_ROWS_COMPACT = 4
+SPEED_DIAL_SPACING = 8
+
+# An ellipsised label reports its whole string as its natural width, and
+# Adw.WrapBox sizes every homogeneous column to its widest child. Capping the
+# natural width stops one long title from stretching each quick-pick column
+# past a phone viewport. Labels still fill whatever the tile allocates them.
+LABEL_NATURAL_MAX_CHARS = 12
 
 # ─── Helpers: kind detection / labelling ────────────────────────────────────
 
@@ -312,6 +336,11 @@ class HomePage(Adw.Bin):
         self.player = player
         self.client = MusicClient()
         self._compact = False
+        self._speed_tiles = []
+        self._speed_wrap = None
+        self._speed_scroll = None
+        self._speed_tile_heights = None
+        self._speed_width_applied = None
         self._loaded = False
         self._loading = False
         self._retry_count = 0
@@ -375,12 +404,18 @@ class HomePage(Adw.Bin):
         ]
         for strip in self._card_strips:
             strip.set_spacing(STRIP_SPACING_COMPACT if compact else STRIP_SPACING)
+        self._speed_tiles = [
+            e for e in getattr(self, "_speed_tiles", []) if e[0].get_parent() is not None
+        ]
+        self._speed_width_applied = None
+        self._apply_speed_tile_style(compact)
         self._propagate_compact(self.feed_box, compact)
+        # after _propagate_compact, which is what resizes the tile covers
+        self._sync_speed_dial_height(compact)
 
     def _propagate_compact(self, widget, compact):
         if hasattr(widget, "has_css_class") and widget.has_css_class("home-section-header"):
             return
-            
         if hasattr(widget, "set_compact"):
             try:
                 widget.set_compact(compact)
@@ -477,6 +512,11 @@ class HomePage(Adw.Bin):
     # ─── Feed building ─────────────────────────────────────────────────────
 
     def _clear_feed(self):
+        self._speed_tiles = []
+        self._speed_wrap = None
+        self._speed_scroll = None
+        self._speed_tile_heights = None
+        self._speed_width_applied = None
         child = self.feed_box.get_first_child()
         while child:
             nxt = child.get_next_sibling()
@@ -537,6 +577,10 @@ class HomePage(Adw.Bin):
             strapline = sec.get("strapline_thumbnail")
             self._add_section(title, contents, bucket, strapline_url=strapline)
 
+        # A feed built while the window is already narrow has never seen the
+        # breakpoint, so nothing has told these widgets they are compact.
+        self.set_compact_mode(self._is_compact_now())
+
     # ─── Section heading ───────────────────────────────────────────────────
 
     def _make_section_header(self, title, bucket=None, strapline_url=None):
@@ -581,14 +625,23 @@ class HomePage(Adw.Bin):
         section_box.append(self._make_section_header("Quick picks"))
 
         scroll_box = HorizontalScrollBox()
+        self._speed_scroll = scroll_box
+        # A mobile tile is as wide as the viewport, and only the scrolled
+        # window's adjustment reports that: once the strip overflows, the wrap
+        # box itself is allocated the content width instead.
+        scroll_box.hadjustment.connect(
+            "changed", self._on_speed_viewport_changed, scroll_box
+        )
 
         wrap = Adw.WrapBox(orientation=Gtk.Orientation.VERTICAL)
         wrap.set_line_homogeneous(True)
-        wrap.set_line_spacing(8)
-        wrap.set_child_spacing(8)
-
-        wrap.set_size_request(-1, 250)
+        wrap.set_line_spacing(SPEED_DIAL_SPACING)
+        wrap.set_child_spacing(SPEED_DIAL_SPACING)
         wrap.set_valign(Gtk.Align.START)
+        self._speed_wrap = wrap
+        # A one-line title makes a shorter tile than a wrapped two-line one, so
+        # without this the rows step up and down across the columns.
+        self._speed_tile_heights = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.VERTICAL)
 
         section_title = "Quick picks"
         playable_pool = [it for it in items if _detect_kind(it, section_title) in ("song", "video")]
@@ -606,17 +659,77 @@ class HomePage(Adw.Bin):
 
         scroll_box.set_content(wrap)
         section_box.append(scroll_box)
+        self._sync_speed_dial_height()
+
+    def _sync_speed_dial_height(self, compact=None):
+        """Hold the dial to a whole number of rows.
+
+        Every tile is the same height, so the column can be measured off one
+        of them instead of leaving a strip of dead space under the last row."""
+        if self._speed_wrap is None or not self._speed_tiles:
+            return
+        if compact is None:
+            compact = self._is_compact_now()
+        rows = SPEED_DIAL_ROWS_COMPACT if compact else SPEED_DIAL_ROWS
+        row = self._speed_tiles[0][0].measure(Gtk.Orientation.VERTICAL, -1)[1]
+        self._speed_wrap.set_size_request(
+            -1, rows * row + (rows - 1) * SPEED_DIAL_SPACING
+        )
+
+    def _is_compact_now(self):
+        root = self.get_root()
+        if root is None:
+            return self._compact
+        return bool(getattr(root, "_is_compact", self._compact))
+
+    def _speed_tile_width(self, compact):
+        if not compact:
+            return SPEED_TILE_WIDTH
+        viewport = 0
+        if self._speed_scroll is not None:
+            viewport = int(self._speed_scroll.hadjustment.get_page_size())
+        if viewport <= 0:
+            return SPEED_TILE_WIDTH_COMPACT
+        return max(
+            SPEED_TILE_WIDTH_COMPACT_MIN,
+            min(SPEED_TILE_WIDTH_COMPACT, viewport - SPEED_DIAL_PEEK),
+        )
+
+    def _on_speed_viewport_changed(self, _adjustment, scroll_box):
+        # A dial torn down by _clear_feed can still emit on its way out
+        if scroll_box is not self._speed_scroll or not self._speed_tiles:
+            return
+        if not self._is_compact_now():
+            return
+        self._apply_speed_tile_style(True)
+
+    def _apply_speed_tile_style(self, compact, entries=None):
+        """Size the tiles and pick how many lines a title gets.
+
+        Mobile runs one tile per column at the full viewport width, wide
+        enough for a title on a single line. Cramming two lines in there is
+        what made the rows uneven before they were forced to one height."""
+        width = self._speed_tile_width(compact)
+        if entries is None:
+            if width == self._speed_width_applied:
+                return
+            self._speed_width_applied = width
+            entries = self._speed_tiles
+        cover = SPEED_TILE_COVER_COMPACT if compact else SPEED_TILE_COVER
+        inset = SPEED_TILE_TEXT_INSET_COMPACT if compact else SPEED_TILE_TEXT_INSET
+        for tile, text_col, title_label in entries:
+            tile.set_size_request(width, -1)
+            text_col.set_size_request(width - cover - inset, -1)
+            title_label.set_wrap(not compact)
+            title_label.set_lines(1 if compact else 2)
 
     def _build_speed_tile(self, item, kind, playable_pool, on_clicked=None):
         tile = Gtk.Button()
         tile.add_css_class("home-speed-tile")
         tile.add_css_class("card")
 
-        root = self.get_root()
-        compact = bool(getattr(root, "_is_compact", False)) if root else self._compact
-        tile_width = 200 if compact else 240
-        tile.set_size_request(tile_width, -1)
-        
+        compact = self._is_compact_now()
+
         inner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         tile.set_child(inner_box)
 
@@ -637,21 +750,23 @@ class HomePage(Adw.Bin):
         text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_col.set_valign(Gtk.Align.CENTER)
         text_col.set_hexpand(True)
-        text_col.set_size_request(
-            tile_width - SPEED_TILE_COVER - (22 if compact else 26), -1
-        )
 
         title_label = Gtk.Label(label=item.get("title", "Unknown"))
         title_label.set_halign(Gtk.Align.FILL)
         title_label.set_xalign(0)
         title_label.set_ellipsize(Pango.EllipsizeMode.END)
-        title_label.set_lines(2)
-        title_label.set_wrap(True)
         title_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         title_label.set_width_chars(1)
+        title_label.set_max_width_chars(LABEL_NATURAL_MAX_CHARS)
         title_label.set_hexpand(True)
         title_label.add_css_class("home-speed-title")
         text_col.append(title_label)
+
+        entry = (tile, text_col, title_label)
+        self._speed_tiles.append(entry)
+        self._apply_speed_tile_style(compact, [entry])
+        if self._speed_tile_heights is not None:
+            self._speed_tile_heights.add_widget(tile)
 
         text_col.append(
             self._build_kind_subtitle(
@@ -872,6 +987,7 @@ class HomePage(Adw.Bin):
                 label.set_halign(Gtk.Align.FILL)
                 label.set_xalign(0)
                 label.set_hexpand(True)
+                label.set_max_width_chars(LABEL_NATURAL_MAX_CHARS)
             label.add_css_class("caption")
             if dim:
                 label.add_css_class("dim-label")
