@@ -106,24 +106,28 @@ class CardBinLayout(Gtk.BinLayout):
     __gtype_name__ = "MuseCardBinLayout"
 
     def do_measure(self, widget, orientation, for_size):
+        width, _n, _mb, _nb = Gtk.BinLayout.do_measure(
+            self, widget, Gtk.Orientation.HORIZONTAL, -1
+        )
         if orientation == Gtk.Orientation.HORIZONTAL:
             # Measured against a set height, the title asks for the width that
-            # fits its text in that many lines, which is what pulls the row
-            # apart. Width comes from the size request alone, so ask for it
-            # unconstrained and report it as both minimum and natural.
+            # fits its text in that many lines, which is what pulls a row of
+            # cards apart. Width comes from the size request alone, so it is
+            # measured unconstrained and reported as minimum and natural both.
             # Baselines are vertical-only, and GTK warns about a horizontal one.
-            minimum, _natural, _mb, _nb = Gtk.BinLayout.do_measure(
-                self, widget, orientation, -1
-            )
-            return minimum, minimum, -1, -1
-        # Height: report the natural as the minimum too. The title label can
-        # ellipsize down to one line, so a card's minimum height is shorter
-        # than the two lines it draws, and any parent that allocates minimum
-        # heights leaves the second line hanging outside the card.
-        _minimum, natural, min_base, nat_base = Gtk.BinLayout.do_measure(
-            self, widget, orientation, for_size
+            return width, width, -1, -1
+        # Height is measured against that same width, whatever for_size says.
+        # A card's height changes with the width it is asked about - a title
+        # that fits on one line at the card's width takes two when the label
+        # is asked at its own natural width - and a parent that measures its
+        # minimum and its natural at different widths then reports a minimum
+        # taller than its natural. GTK resolves that by believing the natural,
+        # which leaves the row a line short and the card clipped.
+        minimum, natural, min_base, nat_base = Gtk.BinLayout.do_measure(
+            self, widget, orientation, width
         )
-        return natural, natural, min_base, nat_base
+        height = max(minimum, natural)
+        return height, height, min_base, nat_base
 
 
 class MediaCardWidget(Gtk.Button):

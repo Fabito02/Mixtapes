@@ -50,14 +50,7 @@ class HorizontalScrollBox(Gtk.Overlay):
         self._animating = False
         self._target_value = 0.0
 
-    def set_content(self, child, propagate_height=True):
-        # A strip is only as tall as the scrolled window asks for, and that is
-        # the child's minimum by default. A card's title label can ellipsize
-        # down to one line, so its minimum is shorter than the two lines it
-        # draws, and the text spills out the bottom of the card. Content that
-        # sizes itself, like a wrap box holding a set number of rows, passes
-        # False: its natural height is every row at once.
-        self.scrolled.set_propagate_natural_height(propagate_height)
+    def set_content(self, child):
         self.scrolled.set_child(child)
         # Delay initial check
         GLib.idle_add(self._update_buttons)

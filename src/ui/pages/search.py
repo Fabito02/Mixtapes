@@ -457,7 +457,9 @@ class SearchPage(Adw.Bin):
 
         scroll_box = HorizontalScrollBox()
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        h_box.set_margin_bottom(12)
+        # Outside the scrolled window: a margin within it is empty space for
+        # the overlay scrollbar to draw a line in.
+        scroll_box.set_margin_bottom(12)
 
         display_items = items
         if is_category:
@@ -574,7 +576,7 @@ class SearchPage(Adw.Bin):
 
         scroll_box = HorizontalScrollBox()
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        h_box.set_margin_bottom(8)
+        scroll_box.set_margin_bottom(8)
 
         for item in items:
             card = self._make_chart_card(

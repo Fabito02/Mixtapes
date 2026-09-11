@@ -657,7 +657,7 @@ class HomePage(Adw.Bin):
             )
             wrap.append(tile)
 
-        scroll_box.set_content(wrap, propagate_height=False)
+        scroll_box.set_content(wrap)
         section_box.append(scroll_box)
         self._sync_speed_dial_height()
 
@@ -899,7 +899,10 @@ class HomePage(Adw.Bin):
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=STRIP_SPACING_COMPACT if compact else STRIP_SPACING,
         )
-        h_box.set_margin_bottom(16)
+        # On the scroll box, not the strip. Inside the scrolled window the
+        # margin is empty space the overlay scrollbar draws in, which reads as
+        # a stray line under the row.
+        scroll_box.set_margin_bottom(16)
         if not hasattr(self, "_card_strips"):
             self._card_strips = []
         self._card_strips.append(h_box)
