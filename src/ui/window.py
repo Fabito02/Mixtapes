@@ -21,6 +21,36 @@ if sys.platform == "win32":
     except ImportError:
         pass
 
+# Contrast the playing-row label clears against the row it sits on. AA
+# (4.5) is the floor for body text and leaves the label barely separated
+# from the accent tint behind it; AAA reads as the highlight it is.
+PLAYING_FG_CONTRAST = color_utils.WCAG_AAA
+
+# Contrast white has to hold against the solid accent to stay the label
+# color on it. libadwaita's floor is the bare 3:1 for non-text contrast;
+# this adds margin because cover-derived accents cluster right on it. In
+# light mode the accent is only darkened until it clears 3:1 against the
+# page, which lands white at 3.06:1 on the button it fills: passing, and
+# still washed out. GNOME's own blue sits at 3.77:1 and keeps white.
+ACCENT_FG_MIN_CONTRAST = 3.5
+
+# How far the sidebar pane steps away from whatever sits behind it, as a
+# contrast ratio. Adwaita's own sidebar stands 1.172 from the window in
+# dark and 1.141 in light, which is the separation the app is measured
+# against.
+SIDEBAR_SEPARATION = 1.17
+# Fraction of the accent's chroma that overlay keeps. In blurred mode the
+# cover already shows through the pane, so an overlay mixed from the
+# accent serves the same hue twice and the sidebar becomes the most
+# saturated surface on screen. Adwaita's sidebar measures 0.007 chroma;
+# 0.15 of a typical accent lands beside it.
+SIDEBAR_TINT = 0.15
+SIDEBAR_OPACITY = 0.16
+# Typical luminance the blur normalizer lands a cover on, per scheme.
+# Stands in until the real measurement arrives with the blurred PNG. See
+# cover_effects.BLUR_DARK_MEDIAN and BLUR_LIGHT_FLOOR.
+BLUR_BACKDROP = {True: 0.025, False: 0.55}
+
 _BLUR_OVERRIDE_CSS = """
 /* Cover background active state overrides */
 window.cover-bg-active toolbarview,
@@ -35,7 +65,7 @@ window.cover-bg-active listbox > row {
 
 window.cover-bg-active .sidebar-pane {
   background: none;
-  background-color: alpha(mix(@accent_color, #4a4a4a, 0.65), 0.16);
+  background-color: @blur_sidebar_bg;
 }
 
 window.cover-bg-active headerbar {
@@ -83,6 +113,14 @@ window.cover-bg-active .home-speed-tile:active {
 
 window.cover-bg-active listview > row:hover .queue-row {
   background-color: alpha(currentColor, 0.1);
+}
+
+/* The checked toggle in a toggle group paints an opaque surface, white on
+   light themes. Over the blurred cover that reads as a hole punched
+   through the glass. @toggle_checked_bg is the translucent stand-in,
+   derived per scheme in _refresh_derived_colors. */
+window.cover-bg-active toggle:checked {
+  background-color: @toggle_checked_bg;
 }
 """
 
@@ -403,9 +441,11 @@ class MainWindow(Adw.ApplicationWindow):
         # Set by _set_dynamic_accent while the cover-derived accent is
         # active; None means libadwaita's own accent is in force.
         self._accent_override = None
-        # (typical, worst-for-text) luminance of the blurred backdrop
-        # currently painted, measured by cover_effects; None when there
-        # isn't one.
+        # Typical luminance of the blurred backdrop currently painted,
+        # measured by cover_effects; None when there isn't one.
+        self._blur_backdrop = None
+        # Pending _do_refresh_derived_colors idle, 0 when none.
+        self._derived_refresh_id = 0
         self._refresh_derived_colors()
         self._last_cover_url = None
         # Hook metadata for the appearance pipeline (blur + dynamic accent).
@@ -627,6 +667,7 @@ class MainWindow(Adw.ApplicationWindow):
         """Remove the cover-bg-active class and clear the CSS provider so
         the chrome returns to its opaque default."""
         self.remove_css_class("cover-bg-active")
+        self._blur_backdrop = None
         self._clear_blurred_background()
 
     def _apply_appearance_prefs_initial(self):
@@ -663,11 +704,15 @@ class MainWindow(Adw.ApplicationWindow):
     def _update_blurred_background(self, thumb_url):
         from ui.cover_effects import get_blurred_cover
 
-        def _apply(path, *args):
+        def _apply(path, backdrop=None):
             if not path or not os.path.exists(path):
+                self._blur_backdrop = None
                 self._deactivate_cover_bg()
                 self._refresh_derived_colors()
                 return False
+            # backdrop is (typical, worst-for-text); the sidebar is sized
+            # off the typical one.
+            self._blur_backdrop = backdrop[0] if backdrop else None
             self._set_blurred_background_css(path)
             self._refresh_derived_colors()
             return False
@@ -755,11 +800,11 @@ class MainWindow(Adw.ApplicationWindow):
                 @define-color popover_bg_color mix(#1b1b1d, @accent_bg_color, 0.10);
                 @define-color dialog_bg_color mix(#1b1b1d, @accent_bg_color, 0.10);
                 @define-color card_bg_color mix(rgba(255, 255, 255, 0.08), @accent_bg_color, 0.10);
-                @define-color sidebar_bg_color mix(#171719, @accent_bg_color, 0.10);
-                @define-color sidebar_backdrop_color mix(#141416, @accent_bg_color, 0.10);
+                @define-color sidebar_bg_color mix(#212123, @accent_bg_color, 0.10);
+                @define-color sidebar_backdrop_color mix(#1b1b1d, @accent_bg_color, 0.10);
                 @define-color sidebar_border_color mix(rgba(0, 0, 0, 0.36), @accent_bg_color, 0.10);
-                @define-color secondary_sidebar_bg_color mix(#141416, @accent_bg_color, 0.10);
-                @define-color secondary_sidebar_backdrop_color mix(#121214, @accent_bg_color, 0.10);
+                @define-color secondary_sidebar_bg_color mix(#1a1a1c, @accent_bg_color, 0.10);
+                @define-color secondary_sidebar_backdrop_color mix(#161618, @accent_bg_color, 0.10);
                 @define-color secondary_sidebar_border_color mix(rgba(0, 0, 0, 0.25), @accent_bg_color, 0.10);
     
                 @define-color panel_bg_color @window_bg_color;
@@ -769,6 +814,7 @@ class MainWindow(Adw.ApplicationWindow):
                 @define-color theme_bg_color @window_bg_color;
                 @define-color theme_base_color @view_bg_color;
                 @define-color theme_selected_bg_color @accent_bg_color;
+                @define-color theme_selected_fg_color @accent_fg_color;
                 """
             else:
                 tint_vars = """
@@ -793,14 +839,25 @@ class MainWindow(Adw.ApplicationWindow):
                 @define-color theme_bg_color @window_bg_color;
                 @define-color theme_base_color @view_bg_color;
                 @define-color theme_selected_bg_color @accent_bg_color;
+                @define-color theme_selected_fg_color @accent_fg_color;
                 """
 
         accent_bg = color_utils.to_css(solid)
-        accent_fg = color_utils.to_css(standalone)
-        
+        accent_standalone = color_utils.to_css(standalone)
+        # Label and icon color for anything filled with the solid accent:
+        # suggested-action buttons, checked switches, the download badge.
+        # libadwaita leaves this at white, which a cover-derived accent
+        # regularly breaks: a yellow-green cover put the play icon at
+        # 1.8:1 on its own button. Flip to black once white stops clearing
+        # ACCENT_FG_MIN_CONTRAST.
+        accent_fg = color_utils.to_css(
+            color_utils.best_foreground(solid, ACCENT_FG_MIN_CONTRAST)
+        )
+
         css = f"""
         @define-color accent_bg_color {accent_bg};
-        @define-color accent_color {accent_fg};
+        @define-color accent_color {accent_standalone};
+        @define-color accent_fg_color {accent_fg};
 
         {tint_vars}
 
@@ -857,6 +914,25 @@ class MainWindow(Adw.ApplicationWindow):
             return None
         return (rgba.red, rgba.green, rgba.blue)
 
+    def _theme_color_over(self, name, base):
+        """`name` as the cascade resolves it, composited on `base` when the
+        token carries alpha.
+
+        libadwaita's light @window_fg_color is 80% black. Measuring
+        contrast against the raw value reads it as pure black and
+        overstates how much room a color underneath it has.
+        """
+        try:
+            found, rgba = self.get_style_context().lookup_color(name)
+        except Exception:
+            return None
+        if not found:
+            return None
+        color = (rgba.red, rgba.green, rgba.blue)
+        if rgba.alpha >= 1.0:
+            return color
+        return color_utils.mix(base, color, rgba.alpha)
+
     def _accent_in_force(self):
         """`(solid, standalone, view_bg)` for the accent in force.
 
@@ -890,23 +966,106 @@ class MainWindow(Adw.ApplicationWindow):
         return solid, standalone, view_bg
 
     def _refresh_derived_colors(self):
+        """Queue a recompute for the next idle.
+
+        _accent_in_force reads @accent_color and @view_bg_color out of the
+        live style cascade whenever the dynamic accent is off, and GTK
+        notifies a scheme change before it swaps the stylesheet: inside
+        notify::dark, get_dark() already reports the new scheme while
+        lookup_color still returns the outgoing one. Deriving there mixed
+        the playing-row label for the theme being left and painted it on
+        the theme being entered, which is the muddy accent after a
+        theme-swatch click. It cleared on the next thing that re-derived,
+        so it never showed up with the dynamic accent on: that path takes
+        its colors from _accent_override, not the cascade.
+
+        Coalesced, so the several callers that fire together on a scheme
+        change still derive once.
+        """
+        if self._derived_refresh_id:
+            return
+        self._derived_refresh_id = GLib.idle_add(self._do_refresh_derived_colors)
+
+    def _do_refresh_derived_colors(self):
+        self._derived_refresh_id = 0
         solid, standalone, view_bg = self._accent_in_force()
         row_bg = color_utils.mix(view_bg, solid, 0.18)
-        target = self._contrast_target()
+        # The playing row's label clears PLAYING_FG_CONTRAST, not the plain
+        # AA target. @accent_color sits at the AA threshold against the flat
+        # view background, and the row's accent tint eats most of that
+        # margin: a mid accent measured 3.6:1 on the row it lands on. The
+        # extra headroom is also what makes the label read as the brighter
+        # sibling of the row tint instead of a muddy version of it.
+        target = max(self._contrast_target(), PLAYING_FG_CONTRAST)
         fg = color_utils.ensure_contrast(standalone, row_bg, target)
 
         is_dark = self._is_dark()
         panel_color = "rgba(18, 18, 20, 0.55)" if is_dark else "rgba(255, 255, 255, 0.65)"
         panel_color_weak = "rgba(18, 18, 20, 0.35)" if is_dark else "rgba(255, 255, 255, 0.45)"
+        # Lighter than the group's own trough in both schemes, and
+        # translucent in both. The opaque light-mode default is what made
+        # the checked toggle punch a white hole through the blurred cover.
+        toggle_checked = "rgba(255, 255, 255, 0.14)" if is_dark else "rgba(255, 255, 255, 0.65)"
+
+        # Sidebar pane over the blurred cover. Sized against the backdrop
+        # actually painted rather than a fixed opacity: a flat 0.16 of a
+        # mid overlay lands wherever the cover happens to be, and over the
+        # near-black end of a dark blur that was a visible slab. Direction
+        # follows Adwaita, whose sidebar is lighter than the window in
+        # dark and darker in light.
+        typical = self._blur_backdrop
+        if typical is None:
+            typical = BLUR_BACKDROP[is_dark]
+        lightness, chroma, hue = color_utils.rgb_to_oklch(solid)
+        sidebar_overlay = color_utils.overlay_for_contrast(
+            color_utils.gray(typical),
+            color_utils.oklch_to_rgb(lightness, chroma * SIDEBAR_TINT, hue),
+            SIDEBAR_OPACITY,
+            SIDEBAR_SEPARATION,
+            lighter=is_dark,
+        )
+        r, g, b = (
+            int(round(min(1.0, max(0.0, c)) * 255)) for c in sidebar_overlay
+        )
+        sidebar_bg = f"rgba({r}, {g}, {b}, {SIDEBAR_OPACITY})"
+
+        # Visualizer bars take the accent, and the transport buttons and
+        # time labels are drawn on top of them. A bright cover put light
+        # text over a near-light peak: a cream accent measured 3.0:1 at
+        # full bar height, a pale green 3.9:1. Hold the tallest bar clear
+        # of the label color instead, which leaves every accent that
+        # already clears it untouched.
+        from ui.widgets.visualizer import Visualizer
+        bar_base = (
+            color_utils.gray(typical)
+            if self._blur_backdrop is not None
+            else self._theme_color("window_bg_color")
+            or color_utils.from_hex("#1e1e1e" if is_dark else "#fafafb")
+        )
+        label_fg = self._theme_color_over("window_fg_color", bar_base) or (
+            (1.0, 1.0, 1.0) if is_dark else (0.0, 0.0, 0.0)
+        )
+        visualizer_bar = color_utils.overlay_clear_of(
+            bar_base,
+            standalone,
+            Visualizer.ACTIVE_ALPHA_MAX,
+            label_fg,
+            self._contrast_target(),
+        )
 
         try:
             self._derived_css.load_from_string(
                 f"@define-color playing_fg {color_utils.to_css(fg)};\n"
                 f"@define-color blur_panel_bg {panel_color};\n"
                 f"@define-color blur_panel_bg_weak {panel_color_weak};\n"
+                f"@define-color toggle_checked_bg {toggle_checked};\n"
+                f"@define-color blur_sidebar_bg {sidebar_bg};\n"
+                f"@define-color visualizer_bar "
+                f"{color_utils.to_css(visualizer_bar)};\n"
             )
         except Exception as e:
             print(f"[appearance] derived color CSS load failed: {e}")
+        return GLib.SOURCE_REMOVE
 
     def _on_track_error(self, player, video_id, title, reason):
         """Surface yt-dlp failures (video unavailable, region-locked, removed)

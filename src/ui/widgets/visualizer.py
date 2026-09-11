@@ -314,12 +314,22 @@ class Visualizer(Gtk.DrawingArea):
     # ─── Drawing ───────────────────────────────────────────────────────────
 
     def _accent_color(self):
-        try:
-            ok, color = self.get_style_context().lookup_color("accent_color")
-        except Exception:
-            ok, color = False, None
-        if ok and color is not None:
-            return color.red, color.green, color.blue
+        """Bar color: @visualizer_bar when MainWindow has derived one,
+        else the plain accent.
+
+        The derived value is the accent held far enough from the color of
+        the transport buttons and time labels, which are drawn on top of
+        the bars. A bright cover otherwise puts light text over a peak
+        that is almost as light.
+        """
+        ctx = self.get_style_context()
+        for name in ("visualizer_bar", "accent_color"):
+            try:
+                ok, color = ctx.lookup_color(name)
+            except Exception:
+                continue
+            if ok and color is not None:
+                return color.red, color.green, color.blue
         return 0.42, 0.34, 0.85
 
     # Faint baseline so the row is always visible. Active bars use a wide

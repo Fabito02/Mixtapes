@@ -15,6 +15,22 @@
                sans-serif;
 }
 
+/* Static fallbacks for the tokens MainWindow recomputes per cover in
+   _refresh_derived_colors. Needed so the rules below still parse before
+   the derived provider loads; GTK drops a declaration naming a color it
+   cannot resolve. */
+/* Playing-row label. @accent_color is tuned against the plain view
+   background and lands under 4:1 on the accent-tinted playing row, which
+   is what made the label read as muddy. Mix toward @view_fg_color:
+   lightens on dark themes, darkens on light ones, which GTK has no media
+   query for. */
+@define-color playing_fg color-mix(in oklab, @accent_color, @view_fg_color 60%);
+/* Checked toggle in a toggle group. Opaque in light mode by default,
+   which punches a solid white hole through the blurred cover. */
+@define-color toggle_checked_bg @card_bg_color;
+/* Sidebar pane over the blurred cover, before the measured value lands. */
+@define-color blur_sidebar_bg alpha(@sidebar_bg_color, 0.16);
+
 .rounded {
   border-radius: 12px;
 }
@@ -87,6 +103,27 @@
 
 .banner-top-rounded {
   border-radius: 12px 12px 0 0;
+}
+
+/* Controls filled with the solid accent. The knob is white in every
+   scheme, so a cover that hands the app a bright accent puts a white knob
+   on a near-white track: the yellow-green cover measured 1.4:1 between
+   the two, and the switch read as permanently mid-animation.
+   @accent_fg_color is the label color the accent already picked for
+   itself, so the knob flips to black exactly when white stops working. */
+switch:checked > slider {
+  background-color: @accent_fg_color;
+}
+
+/* A scale's knob rides the boundary between the accent highlight and the
+   empty trough, so it cannot take one fill and contrast with both. Ring
+   it instead. The ring is invisible while @accent_fg_color is white (a
+   white knob on a dark or mid accent already separates) and appears only
+   on the bright accents that need it. Outline, not box-shadow, so
+   libadwaita's elevation on the knob survives. */
+scale > trough > slider {
+  outline: 1px solid alpha(@accent_fg_color, 0.5);
+  outline-offset: -1px;
 }
 
 listview.playlist-view > row,
@@ -196,7 +233,19 @@ listboxrow label {
 }
 
 .playing {
-  color: @accent_color;
+  color: @playing_fg;
+}
+
+/* `.accent` and `.dim-label` set their own color, so they ignore the
+   inherited `.playing` one. The indicator icon follows the label, and the
+   artist line keeps enough of the lift to stay readable on the tinted
+   row. */
+.playing .accent {
+  color: @playing_fg;
+}
+.playing .dim-label {
+  color: alpha(@playing_fg, 0.7);
+  opacity: 1;
 }
 
 .cover-desktop {
@@ -217,7 +266,7 @@ list row.playing {
   background-color: alpha(@accent_bg_color, 0.18);
 }
 list row.playing label {
-  color: @accent_color;
+  color: @playing_fg;
 }
 
 /* The queue inside the mobile bottom sheet is one surface, not a content
@@ -225,8 +274,15 @@ list row.playing label {
    @headerbar_bg_color and the list paints @view_bg_color, which differ by
    the accent wash (0.10 over #fafafa against 0.08 over #ffffff) and read
    as two panels inside one sheet. Blurred mode already unifies them in
-   its own override, so this covers the plain case. */
-bottom-sheet .queue-panel {
+   its own override, so this covers the plain case.
+
+   `:not(.sidebar)` is what keeps it off the desktop queue. BottomSheet
+   wraps the whole window (`bottom_sheet.set_content(self.split_view)`),
+   so `bottom-sheet .queue-panel` matches the split view's sidebar too and
+   was painting it @view_bg_color: 1.04 against the content pane in light
+   and 1.06 in dark, inverted, which is why the sidebar was invisible.
+   ExpandedPlayer builds its own QueuePanel and never adds `.sidebar`. */
+bottom-sheet .queue-panel:not(.sidebar) {
   background-color: @view_bg_color;
 }
 bottom-sheet .queue-panel toolbarview,
@@ -251,6 +307,22 @@ popover.menu modelbutton {
   color: @popover_fg_color;
 }
 
+/* A tooltip for a widget inside a popover is parented into that popover,
+   so the reset above reaches the tooltip's own label and repaints it
+   @popover_fg_color. Adwaita gives a tooltip a fixed dark scrim in both
+   schemes and sets `color: white` on the tooltip node, which the label
+   only inherits, and an inherited value always loses to a rule that
+   matches the label directly. In dark mode @popover_fg_color happens to
+   be white so nothing looked wrong; in light mode it is near-black, and
+   the theme-switcher tooltips came out black on the dark scrim.
+
+   Three elements and a class out-ranks `popover.menu label`, and the
+   tooltip's box is part of GtkTooltipWindow's template, so it is always
+   there to match. */
+tooltip.background box label {
+  color: #ffffff;
+}
+
 picture.song-img, .song-img, label.song-index {
   min-width: 56px;
   min-height: 56px;
@@ -268,13 +340,17 @@ picture.song-img, .song-img, label.song-index {
 }
 
 .song-download-icon {
+    /* Stops kept close to the accent. At white 0.5 / black 0.45 the tile
+       spanned 0.41 in OkLCh lightness and bottomed out near black, so it
+       read as a dark slab rather than an accent-colored one. 0.28 / 0.18
+       spans 0.19 and stays the accent from top to bottom. */
     background: linear-gradient(
       135deg,
-      mix(var(--accent-bg-color), white, 0.5) 0%,
+      mix(var(--accent-bg-color), white, 0.28) 0%,
       var(--accent-bg-color) 50%,
-      mix(var(--accent-bg-color), black, 0.45) 100%
+      mix(var(--accent-bg-color), black, 0.18) 100%
     );
-    color: white;
+    color: @accent_fg_color;
 }
 
 .song-download-icon image {
@@ -407,13 +483,17 @@ flowboxchild:focus-visible {
     border-radius: 12px;
     min-width: 100px;
     min-height: 100px;
+    /* Stops kept close to the accent. At white 0.5 / black 0.45 the tile
+       spanned 0.41 in OkLCh lightness and bottomed out near black, so it
+       read as a dark slab rather than an accent-colored one. 0.28 / 0.18
+       spans 0.19 and stays the accent from top to bottom. */
     background: linear-gradient(
       135deg,
-      mix(var(--accent-bg-color), white, 0.5) 0%,
+      mix(var(--accent-bg-color), white, 0.28) 0%,
       var(--accent-bg-color) 50%,
-      mix(var(--accent-bg-color), black, 0.45) 100%
+      mix(var(--accent-bg-color), black, 0.18) 100%
     );
-    color: white;
+    color: @accent_fg_color;
     -gtk-icon-size: 72px;
 }
 
@@ -480,10 +560,29 @@ flowboxchild:focus-visible {
 }
 
 .sidebar {
-  background-color: @window_bg_color;
   border-left: none;
   border-right: none;
   transition: background-color 300ms ease;
+}
+
+/* The queue sidebar's surface.
+
+   Nautilus and the Adwaita demo put their sidebar next to @view_bg_color,
+   where @sidebar_bg_color stands 1.244 in dark and 1.191 in light. Our
+   content pane paints @window_bg_color instead, and against that the same
+   token only reaches 1.172 / 1.141, which is why the pane reads as part
+   of the page here and not there.
+
+   Mixing 2% of @window_fg_color into it restores 1.245 / 1.192. The
+   direction comes free: @window_fg_color is white on dark themes and
+   black on light ones, so one rule lifts in dark and deepens in light,
+   which GTK has no media query for.
+
+   Needs both classes to out-rank `.queue-panel`'s transparent rule below
+   and libadwaita's `.background`, which is why the bare `.sidebar` above
+   never painted anything. */
+.queue-panel.sidebar {
+  background-color: mix(@sidebar_bg_color, @window_fg_color, 0.02);
 }
 
 /* Crossfade on dark/light scheme switch — GTK doesn't animate
