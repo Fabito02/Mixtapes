@@ -182,6 +182,10 @@ IMG_CACHE = collections.OrderedDict()
 # covers dominate the process footprint.
 MAX_CACHE_SIZE = 12
 MAX_CACHED_DIM = 512
+# How long a loaded image holds its texture after going off screen. Long
+# enough that a breakpoint or a tab switch never repaints a placeholder,
+# short enough that a view left alone gives its artwork back.
+HIDDEN_UNLOAD_DELAY = 30
 IMG_CACHE_LOCK = threading.Lock()
 
 # Bounded executor for image fetches. Each row's `load_url` used to spawn a
@@ -894,10 +898,12 @@ class AsyncImage(Gtk.Image):
         self.video_id = None
         self._pending_fetch = None
         self._map_handler_id = None
+        self._unload_source = None
         self.connect("destroy", self._on_destroy)
         self._base_size = self.target_w
 
         self.connect("unmap", self._on_unmap)
+        self.connect("map", self._cancel_hidden_unload)
 
         if url:
             self.load_url(url)
@@ -929,11 +935,12 @@ class AsyncImage(Gtk.Image):
         current_url = self.url
         if not current_url:
             return
-        # An image that has finished loading keeps its art. Dropping it here
-        # cost a placeholder frame and a fresh disk read on the way back,
-        # since IMG_CACHE only holds MAX_CACHE_SIZE pixbufs and a breakpoint
-        # hides and reparents whole views at once. Anything still in flight
-        # falls through and reloads on the next map, as before.
+        # An image that has finished loading holds its art for a while
+        # instead of dropping it here. Dropping it on every unmap cost a
+        # placeholder frame and a fresh disk read on the way back, since
+        # IMG_CACHE only holds MAX_CACHE_SIZE pixbufs and a breakpoint hides
+        # and reparents whole views at once. Anything still in flight falls
+        # through and reloads on the next map, as before.
         future = self._active_future
         settled = (
             not self._is_placeholder
@@ -942,12 +949,41 @@ class AsyncImage(Gtk.Image):
             and (future is None or future.done())
         )
         if settled:
+            if getattr(self, "_unload_source", None) is None:
+                self._unload_source = GLib.timeout_add_seconds(
+                    HIDDEN_UNLOAD_DELAY, self._unload_while_hidden
+                )
             return
+        self._drop_and_rearm(current_url)
+
+    def _unload_while_hidden(self):
+        self._unload_source = None
+        url = getattr(self, "url", None)
+        if not url or self.get_mapped():
+            return GLib.SOURCE_REMOVE
+        self._drop_and_rearm(url)
+        return GLib.SOURCE_REMOVE
+
+    def _cancel_hidden_unload(self, *_):
+        # getattr, not attribute access: destroy can fire on a wrapper that
+        # no longer carries the instance state, which is why the rest of the
+        # teardown here only ever assigns or uses getattr.
+        source = getattr(self, "_unload_source", None)
+        if source is not None:
+            try:
+                GLib.source_remove(source)
+            except Exception:
+                pass
+        self._unload_source = None
+
+    def _drop_and_rearm(self, url):
+        """Give the texture back. The reload is deferred to the next map."""
         self.cancel_and_unload()
         self.set_from_icon_name("image-missing-symbolic")
-        self.load_url(current_url)
+        self.load_url(url)
         
     def _on_destroy(self, *_):
+        self._cancel_hidden_unload()
         self._pending_fetch = None
         self.url = None
         self.video_id = None
@@ -1256,8 +1292,10 @@ class AsyncPicture(Gtk.Picture):
         self._is_placeholder = True
         self._pending_fetch = None
         self._map_handler_id = None
+        self._unload_source = None
         self.connect("destroy", self._on_destroy)
         self.connect("unmap", self._on_unmap)
+        self.connect("map", self._cancel_hidden_unload)
         self._active_future = None
         
         if target_size:
@@ -1300,11 +1338,12 @@ class AsyncPicture(Gtk.Picture):
         current_url = self.url
         if not current_url:
             return
-        # An image that has finished loading keeps its art. Dropping it here
-        # cost a placeholder frame and a fresh disk read on the way back,
-        # since IMG_CACHE only holds MAX_CACHE_SIZE pixbufs and a breakpoint
-        # hides and reparents whole views at once. Anything still in flight
-        # falls through and reloads on the next map, as before.
+        # An image that has finished loading holds its art for a while
+        # instead of dropping it here. Dropping it on every unmap cost a
+        # placeholder frame and a fresh disk read on the way back, since
+        # IMG_CACHE only holds MAX_CACHE_SIZE pixbufs and a breakpoint hides
+        # and reparents whole views at once. Anything still in flight falls
+        # through and reloads on the next map, as before.
         future = self._active_future
         settled = (
             not self._is_placeholder
@@ -1313,12 +1352,41 @@ class AsyncPicture(Gtk.Picture):
             and (future is None or future.done())
         )
         if settled:
+            if getattr(self, "_unload_source", None) is None:
+                self._unload_source = GLib.timeout_add_seconds(
+                    HIDDEN_UNLOAD_DELAY, self._unload_while_hidden
+                )
             return
+        self._drop_and_rearm(current_url)
+
+    def _unload_while_hidden(self):
+        self._unload_source = None
+        url = getattr(self, "url", None)
+        if not url or self.get_mapped():
+            return GLib.SOURCE_REMOVE
+        self._drop_and_rearm(url)
+        return GLib.SOURCE_REMOVE
+
+    def _cancel_hidden_unload(self, *_):
+        # getattr, not attribute access: destroy can fire on a wrapper that
+        # no longer carries the instance state, which is why the rest of the
+        # teardown here only ever assigns or uses getattr.
+        source = getattr(self, "_unload_source", None)
+        if source is not None:
+            try:
+                GLib.source_remove(source)
+            except Exception:
+                pass
+        self._unload_source = None
+
+    def _drop_and_rearm(self, url):
+        """Give the texture back. The reload is deferred to the next map."""
         self.cancel_and_unload()
         self.set_from_icon_name("image-missing-symbolic")
-        self.load_url(current_url)
+        self.load_url(url)
 
     def _on_destroy(self, *_):
+        self._cancel_hidden_unload()
         self._pending_fetch = None
         self.url = None
         self.video_id = None
