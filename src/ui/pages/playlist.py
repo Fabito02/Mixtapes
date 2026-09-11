@@ -466,6 +466,10 @@ class PlaylistPage(Adw.Bin):
         bin_widget.add_css_class("list-item-bin")
         list_item.set_child(bin_widget)
 
+        # The row is its own button, so .activatable doubles the hover highlight.
+        list_item.set_selectable(False)
+        list_item.set_activatable(False)
+
         overlay = Gtk.Overlay()
         overlay.set_hexpand(True)
 
@@ -650,14 +654,10 @@ class PlaylistPage(Adw.Bin):
             return
 
         if type(item).__name__ == "HeaderItem":
-            list_item.set_selectable(False)
-            list_item.set_activatable(False)
             bin_widget.set_child(self.header_container)
             return
 
         bin_widget.set_child(bin_widget._lv_track_ui)
-        list_item.set_selectable(True)
-        list_item.set_activatable(True)
 
         track_ui = bin_widget._lv_track_ui
         row = getattr(track_ui, "_lv_row", track_ui)
@@ -782,8 +782,6 @@ class PlaylistPage(Adw.Bin):
             row.set_sensitive(False)
             row.set_opacity(0.4)
         else:
-            list_item.set_activatable(has_id)
-            list_item.set_selectable(has_id)
             row.set_sensitive(has_id)
             row.set_opacity(1.0)
 
