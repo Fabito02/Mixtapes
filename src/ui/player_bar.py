@@ -645,9 +645,13 @@ class PlayerBar(Gtk.Box):
             self.volume_btn.set_icon_name("audio-volume-high-symbolic")
 
     def _on_swipe(self, gesture, vx, vy):
-        if self._skip_cooldown:
+        if not self.is_compact or self._skip_cooldown:
             return
-        if abs(vx) > abs(vy) and abs(vx) > 200:
+
+        if abs(vy) > 100 or abs(vy) > abs(vx) * 0.5:
+            return
+
+        if abs(vx) > 350:
             self._skip_cooldown = True
             if vx < 0:
                 self.player.next()

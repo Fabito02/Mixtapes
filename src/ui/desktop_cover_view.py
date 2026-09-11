@@ -410,7 +410,7 @@ class DesktopCoverView(Adw.Bin):
         self._bp_bin.set_size_request(150, 150)
         self._bp_bin.set_child(self.view_overlay)
         collapse_bp = Adw.Breakpoint.new(
-            Adw.BreakpointCondition.parse("max-width: 720px")
+            Adw.BreakpointCondition.parse("max-width: 735px")
         )
         collapse_bp.add_setter(self.split, "collapsed", True)
         self._bp_bin.add_breakpoint(collapse_bp)
