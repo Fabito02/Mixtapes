@@ -264,15 +264,27 @@ class DesktopCoverView(Adw.Bin):
         self._refresh_more_menu()
         buttons_row.append(self.more_btn)
 
-        progress_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        progress_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         progress_row.set_hexpand(True)
-        progress_row.set_valign(Gtk.Align.CENTER)
+
+        time_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        time_row.set_hexpand(True)
 
         self.current_time_label = Gtk.Label(label="0:00")
         self.current_time_label.add_css_class("caption")
         self.current_time_label.add_css_class("numeric")
-        self.current_time_label.set_valign(Gtk.Align.CENTER)
-        progress_row.append(self.current_time_label)
+        self.current_time_label.set_halign(Gtk.Align.START)
+        time_row.append(self.current_time_label)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        time_row.append(spacer)
+
+        self.total_time_label = Gtk.Label(label="0:00")
+        self.total_time_label.add_css_class("caption")
+        self.total_time_label.add_css_class("numeric")
+        self.total_time_label.set_halign(Gtk.Align.END)
+        time_row.append(self.total_time_label)
 
         self.scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
         self.scale.set_hexpand(True)
@@ -288,18 +300,13 @@ class DesktopCoverView(Adw.Bin):
         self.scale.add_controller(scroll_controller)
         progress_row.append(self.scale)
 
-        self.total_time_label = Gtk.Label(label="0:00")
-        self.total_time_label.add_css_class("caption")
-        self.total_time_label.add_css_class("numeric")
-        self.total_time_label.set_valign(Gtk.Align.CENTER)
-        progress_row.append(self.total_time_label)
-
         controls_overlay_content = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, spacing=8
+            orientation=Gtk.Orientation.VERTICAL
         )
         controls_overlay_content.set_hexpand(True)
         controls_overlay_content.set_valign(Gtk.Align.CENTER)
         controls_overlay_content.append(progress_row)
+        controls_overlay_content.append(time_row)
         controls_overlay_content.append(buttons_row)
         
         self.controls_overlay = Gtk.Overlay()
@@ -308,7 +315,7 @@ class DesktopCoverView(Adw.Bin):
 
         overlay_base = Adw.Bin()
         overlay_base.set_hexpand(True)
-        overlay_base.set_size_request(-1, 80)
+        overlay_base.set_size_request(-1, 85)
         self.controls_overlay.set_child(overlay_base)
 
         self.controls_overlay.add_overlay(self.visualizer)
@@ -697,6 +704,10 @@ class DesktopCoverView(Adw.Bin):
 
     def _load_css(self):
         css = """ 
+        .progress-scale {
+            padding-left: 0;
+            padding-right: 0;
+        }
         .progress-scale trough { 
             min-height: 6px; 
             border-radius: 4px; 
@@ -707,21 +718,18 @@ class DesktopCoverView(Adw.Bin):
             border-radius: 2px; 
             background-color: @accent_color; 
         } 
-        .progress-scale slider { 
-            min-height: 12px; 
-            min-width: 12px; 
-            margin: -4px; 
+        .progress-scale slider {
             border-radius: 50%; 
             background-color: @window_fg_color; 
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); 
             opacity: 0; 
-            transition: opacity 150ms ease-in-out; 
+            transition: opacity 150ms ease; 
         } 
         .progress-scale:hover slider { 
             opacity: 1; 
         } 
         .cover-visualizer { 
-            transform: translateY(12px); 
+            transform: translateY(14px); 
         } 
         """
         provider = Gtk.CssProvider()
