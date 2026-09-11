@@ -106,14 +106,24 @@ class CardBinLayout(Gtk.BinLayout):
     __gtype_name__ = "MuseCardBinLayout"
 
     def do_measure(self, widget, orientation, for_size):
-        minimum, natural, min_base, nat_base = Gtk.BinLayout.do_measure(
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            # Measured against a set height, the title asks for the width that
+            # fits its text in that many lines, which is what pulls the row
+            # apart. Width comes from the size request alone, so ask for it
+            # unconstrained and report it as both minimum and natural.
+            # Baselines are vertical-only, and GTK warns about a horizontal one.
+            minimum, _natural, _mb, _nb = Gtk.BinLayout.do_measure(
+                self, widget, orientation, -1
+            )
+            return minimum, minimum, -1, -1
+        # Height: report the natural as the minimum too. The title label can
+        # ellipsize down to one line, so a card's minimum height is shorter
+        # than the two lines it draws, and any parent that allocates minimum
+        # heights leaves the second line hanging outside the card.
+        _minimum, natural, min_base, nat_base = Gtk.BinLayout.do_measure(
             self, widget, orientation, for_size
         )
-        if orientation == Gtk.Orientation.HORIZONTAL:
-            # Baselines are vertical-only; chaining up hands back whatever the
-            # bin layout measured and GTK warns about it.
-            return minimum, minimum, -1, -1
-        return minimum, natural, min_base, nat_base
+        return natural, natural, min_base, nat_base
 
 
 class MediaCardWidget(Gtk.Button):

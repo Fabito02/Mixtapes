@@ -657,7 +657,7 @@ class HomePage(Adw.Bin):
             )
             wrap.append(tile)
 
-        scroll_box.set_content(wrap)
+        scroll_box.set_content(wrap, propagate_height=False)
         section_box.append(scroll_box)
         self._sync_speed_dial_height()
 
@@ -919,7 +919,7 @@ class HomePage(Adw.Bin):
         card = MediaCardWidget(
             item,
             player=self.player,
-            title_lines=1,
+            title_lines=2,
             on_clicked=lambda btn, it: self._on_card_clicked(btn)
         )
         card.item_kind = kind
