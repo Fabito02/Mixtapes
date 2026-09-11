@@ -91,12 +91,22 @@ class SearchPage(Adw.Bin):
 
         self.toggle_group_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.toggle_group_container.set_halign(Gtk.Align.CENTER)
-        self.toggle_group_container.set_margin_top(16)
-        self.toggle_group_container.set_margin_bottom(8)
         self.toggle_group_container.set_margin_start(12)
         self.toggle_group_container.set_margin_end(12)
 
-        results_page.append(self.toggle_group_container)
+        # Scroll the tab strip sideways instead of ellipsizing labels on phones.
+        # NATURAL policy makes the viewport hand the strip its full width.
+        toggle_viewport = Gtk.Viewport()
+        toggle_viewport.set_hscroll_policy(Gtk.ScrollablePolicy.NATURAL)
+        toggle_viewport.set_child(self.toggle_group_container)
+
+        self.toggle_scroller = ScrolledWindow()
+        self.toggle_scroller.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
+        self.toggle_scroller.set_child(toggle_viewport)
+        self.toggle_scroller.set_margin_top(16)
+        self.toggle_scroller.set_margin_bottom(8)
+
+        results_page.append(self.toggle_scroller)
 
         self.results_stack = Gtk.Stack()
         self.results_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
@@ -155,6 +165,7 @@ class SearchPage(Adw.Bin):
 
         self.set_child(box)
         self.search_timer = None
+        self._result_toggles = []
 
         self.stack.set_visible_child_name("explore")
 
@@ -237,6 +248,8 @@ class SearchPage(Adw.Bin):
 
     def set_compact_mode(self, compact):
         self._compact = compact
+        for toggle, full_name, compact_name in self._result_toggles:
+            toggle.set_label(compact_name if compact else full_name)
         if compact:
             self.add_css_class("compact")
             self.explore_box.set_spacing(16)
@@ -1066,6 +1079,8 @@ class SearchPage(Adw.Bin):
         while child := self.toggle_group_container.get_first_child():
             self.toggle_group_container.remove(child)
 
+        self._result_toggles = []
+
         if not results:
             return
 
@@ -1115,11 +1130,12 @@ class SearchPage(Adw.Bin):
 
         first_page_id = None
 
-        def create_tab(name, page_id):
+        def create_tab(name, page_id, compact_name=None):
             nonlocal first_page_id
+            compact = getattr(self, "_compact", False)
             page_box = Gtk.Box(
                 orientation=Gtk.Orientation.VERTICAL,
-                spacing=16 if getattr(self, "_compact", False) else 24
+                spacing=16 if compact else 24
             )
             page_box.set_margin_top(16)
             page_box.set_margin_bottom(24)
@@ -1128,7 +1144,9 @@ class SearchPage(Adw.Bin):
 
             self.results_stack.add_named(page_box, page_id)
 
-            toggle = Adw.Toggle(label=name, name=page_id)
+            compact_name = compact_name or name
+            toggle = Adw.Toggle(label=compact_name if compact else name, name=page_id)
+            self._result_toggles.append((toggle, name, compact_name))
             self.results_toggle_group.add(toggle)
 
             if first_page_id is None:
@@ -1153,11 +1171,11 @@ class SearchPage(Adw.Bin):
             self.add_section(artists_tab, "Artists", artists)
 
         if playlists:
-            playlists_tab = create_tab("Community Playlists", "playlists")
+            playlists_tab = create_tab("Community Playlists", "playlists", "Playlists")
             self.add_section(playlists_tab, "Playlists", playlists)
 
         if others:
-            others_tab = create_tab("Other results", "others")
+            others_tab = create_tab("Other results", "others", "Other")
             if albums:
                 self.add_section(others_tab, "Albums", albums)
             if videos:
