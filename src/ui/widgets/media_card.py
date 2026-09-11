@@ -119,6 +119,15 @@ class MediaCardWidget(Gtk.Button):
 
     def set_compact_mode(self, compact: bool):
         self._compact = bool(compact)
+        self.target_size = CARD_SIZE_COMPACT if compact else CARD_SIZE_DEFAULT
+
+        self.main_box.set_size_request(self.target_size, -1)
+
+        if hasattr(self, "_cover_img") and self._cover_img:
+            if hasattr(self._cover_img, "set_size"):
+                self._cover_img.set_size(self.target_size, self.target_size)
+            else:
+                self._cover_img.set_size_request(self.target_size, self.target_size)
 
         if compact:
             self.add_css_class("compact")
