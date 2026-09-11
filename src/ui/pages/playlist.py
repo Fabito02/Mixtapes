@@ -471,6 +471,9 @@ class PlaylistPage(Adw.Bin):
         bin_widget.add_css_class("list-item-bin")
         list_item.set_child(bin_widget)
 
+        list_item.set_selectable(False)
+        list_item.set_activatable(False)
+
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         row.set_hexpand(True)
         row.add_css_class("song-row")
@@ -634,14 +637,10 @@ class PlaylistPage(Adw.Bin):
             return
 
         if type(item).__name__ == "HeaderItem":
-            list_item.set_selectable(False)
-            list_item.set_activatable(False)
             bin_widget.set_child(self.header_container)
             return
 
         bin_widget.set_child(bin_widget._lv_track_ui)
-        list_item.set_selectable(True)
-        list_item.set_activatable(True)
 
         row = bin_widget._lv_track_ui
         t = item.data
@@ -767,8 +766,6 @@ class PlaylistPage(Adw.Bin):
             row.set_sensitive(False)
             row.set_opacity(0.4)
         else:
-            list_item.set_activatable(has_id)
-            list_item.set_selectable(has_id)
             row.set_sensitive(has_id)
             row.set_opacity(1.0)
 
