@@ -5,6 +5,7 @@ from ui.queue_panel import QueuePanel
 from ui.util_classes import ScrolledWindow
 from ui.utils import AsyncPicture, LikeButton, MarqueeLabel, show_toast
 from ui.widgets.lyrics_view import LyricsView
+from ui.widgets.visualizer import Visualizer
 
 MAX_CAROUSEL_COVERS = 31
 CAROUSEL_PRELOAD_RADIUS = 5
@@ -107,7 +108,7 @@ class ExpandedPlayer(Gtk.Box):
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         main_box.set_margin_top(12)
-        main_box.set_margin_bottom(16)
+        main_box.set_margin_bottom(24)
 
         self.covers = []
         self._cover_offset = 0
@@ -160,9 +161,11 @@ class ExpandedPlayer(Gtk.Box):
 
         # Metadata & Like
         meta_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        meta_row.set_halign(Gtk.Align.FILL)
-        meta_row.set_margin_start(32)
-        meta_row.set_margin_end(32)
+        meta_row.set_hexpand(True)
+        meta_row.set_valign(Gtk.Align.CENTER)
+        meta_row.set_margin_start(24)
+        meta_row.set_margin_end(24)
+        meta_row.set_margin_bottom(8)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_box.set_hexpand(True)
@@ -203,8 +206,8 @@ class ExpandedPlayer(Gtk.Box):
         main_box.append(meta_row)
 
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        progress_box.set_margin_start(16)
-        progress_box.set_margin_end(16)
+        progress_box.set_margin_start(24)
+        progress_box.set_margin_end(24)
         self.scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
         self.scale.set_range(0, 100)
         self.scale.add_css_class("progress-scale")
@@ -212,8 +215,6 @@ class ExpandedPlayer(Gtk.Box):
         progress_box.append(self.scale)
 
         timings_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        timings_box.set_margin_start(8)
-        timings_box.set_margin_end(8)
         timings_box.set_margin_top(0)
         self.pos_label = Gtk.Label(label="0:00")
         self.pos_label.add_css_class("caption")
@@ -230,7 +231,6 @@ class ExpandedPlayer(Gtk.Box):
         timings_box.append(dur_spacer)
         timings_box.append(self.dur_label)
         progress_box.append(timings_box)
-        main_box.append(progress_box)
 
         # Media Controls
         controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -305,9 +305,62 @@ class ExpandedPlayer(Gtk.Box):
         controls_box.append(self.play_btn)
         controls_box.append(self.next_btn)
         controls_box.append(self.more_btn)
-        main_box.append(controls_box)
 
-        self.player_scroll.set_child(main_box)
+        # Bars sit behind the progress bar and transport row, same as the
+        # desktop cover view. The visualizer is the overlay's main child so
+        # the controls paint on top of the bars, and the 85px band is pinned
+        # to the bottom to match the height the bars get on desktop. Letting
+        # them fill instead would run them up past the play button, since the
+        # mobile transport row is ~35px taller.
+        self.visualizer = Visualizer(self.player, height=85)
+        self.visualizer.set_hexpand(True)
+        self.visualizer.set_valign(Gtk.Align.END)
+        self.visualizer.set_can_target(False)
+        self.visualizer.add_css_class("player-visualizer")
+
+        controls_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        controls_content.set_hexpand(True)
+        controls_content.append(progress_box)
+        controls_content.append(controls_box)
+
+        self.controls_overlay = Gtk.Overlay()
+        self.controls_overlay.set_hexpand(True)
+        self.controls_overlay.set_child(self.visualizer)
+        self.controls_overlay.add_overlay(controls_content)
+        # Without this the overlay measures only the bars, and the scrolled
+        # player view squeezes it to that 85px minimum when the window is
+        # short, clipping the bottom off the transport row.
+        self.controls_overlay.set_measure_overlay(controls_content, True)
+
+        main_box.append(self.controls_overlay)
+
+        # AdwBottomSheet sizes the drawer to its child's NATURAL height (it
+        # ignores vexpand), so the sheet used to stop wherever the cover and
+        # controls happened to end. This probe claims a natural height taller
+        # than any window while keeping a near-zero minimum: a scrolled
+        # window propagates its child's natural height but not its minimum.
+        # A plain height request would raise the minimum too, which pins the
+        # window's own minimum size and stops it shrinking.
+        #
+        # It rides in an overlay rather than in main_box because a box would
+        # hand it real space and squeeze the cover; overlay children all get
+        # the same allocation, and set_measure_overlay folds its height into
+        # the overlay's measurement.
+        self._height_probe = Gtk.ScrolledWindow()
+        self._height_probe.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.EXTERNAL)
+        self._height_probe.set_propagate_natural_height(True)
+        self._height_probe.set_can_target(False)
+        probe_filler = Gtk.Box()
+        probe_filler.set_size_request(-1, 3000)
+        self._height_probe.set_child(probe_filler)
+        self._height_probe.set_visible(False)
+
+        page_overlay = Gtk.Overlay()
+        page_overlay.set_child(main_box)
+        page_overlay.add_overlay(self._height_probe)
+        page_overlay.set_measure_overlay(self._height_probe, True)
+
+        self.player_scroll.set_child(page_overlay)
         self.view_stack.add_titled_with_icon(
             self.player_scroll, "player", "Player", "folder-music-symbolic"
         )
@@ -372,7 +425,23 @@ class ExpandedPlayer(Gtk.Box):
         else:
             self.set_margin_top(32)
 
+    def _sync_height_probe(self):
+        """The probe only earns its keep inside the bottom sheet, which is
+        the one parent here that sizes to natural height. As the desktop
+        stack's page this widget fills its parent, so keep the inflated
+        height out of that branch's measurement."""
+        parent = self.get_parent()
+        in_sheet = False
+        while parent is not None:
+            if isinstance(parent, Adw.BottomSheet):
+                in_sheet = True
+                break
+            parent = parent.get_parent()
+        if self._height_probe.get_visible() != in_sheet:
+            self._height_probe.set_visible(in_sheet)
+
     def _on_map(self, widget):
+        self._sync_height_probe()
         GLib.idle_add(self._center_carousel)
         if self.player.current_video_id and 0 <= self.player.current_queue_index < len(
             self.player.queue

@@ -1783,14 +1783,19 @@ class MainWindow(Adw.ApplicationWindow):
             return nav
         return None
 
-    def _get_visualizer(self):
-        """Return the cover-view's visualizer widget, or None if it hasn't
-        been constructed (e.g. mobile breakpoint before desktop cover view
-        is created)."""
-        cover = getattr(self, "desktop_cover_view", None)
-        if cover is None:
-            return None
-        return getattr(cover, "visualizer", None)
+    def _get_visualizers(self):
+        """Every live visualizer widget: the desktop cover view's and the
+        mobile expanded player's. Either holder can be missing while the
+        window is still building, so callers get whatever exists."""
+        out = []
+        for holder in ("desktop_cover_view", "expanded_player"):
+            view = getattr(self, holder, None)
+            if view is None:
+                continue
+            viz = getattr(view, "visualizer", None)
+            if viz is not None:
+                out.append(viz)
+        return out
 
     def _draw_upload_pie(self, area, cr, width, height):
         import math
@@ -2589,8 +2594,7 @@ class MainWindow(Adw.ApplicationWindow):
             with open(_prefs_path, "w") as f:
                 _json.dump(_prefs, f)
 
-            viz = self._get_visualizer()
-            if viz is not None:
+            for viz in self._get_visualizers():
                 viz.set_visible(on)
 
             bars_row.set_sensitive(on)
@@ -2625,8 +2629,7 @@ class MainWindow(Adw.ApplicationWindow):
             os.makedirs(os.path.dirname(_prefs_path), exist_ok=True)
             with open(_prefs_path, "w") as f:
                 _json.dump(_prefs, f)
-            viz = self._get_visualizer()
-            if viz is not None:
+            for viz in self._get_visualizers():
                 viz.set_bar_count(n)
 
         bars_scale.connect("value-changed", on_bars_changed)
@@ -2659,8 +2662,7 @@ class MainWindow(Adw.ApplicationWindow):
             os.makedirs(os.path.dirname(_prefs_path), exist_ok=True)
             with open(_prefs_path, "w") as f:
                 _json.dump(_prefs, f)
-            viz = self._get_visualizer()
-            if viz is not None:
+            for viz in self._get_visualizers():
                 viz.set_smoothing(v)
 
         smooth_scale.connect("value-changed", on_smooth_changed)

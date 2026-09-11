@@ -790,3 +790,12 @@ window > windowhandle,
 .disliked-button {
     color: @destructive_color;
 }
+
+/* Mobile player bars, nudged past the transport row's baseline the way
+   .cover-visualizer does on the desktop cover view. The drawn band is
+   pinned to the bottom of the controls overlay, so the shift is what puts
+   daylight between the bars and the buttons sitting on top of them.
+   main_box keeps a 24px bottom margin, which absorbs the offset. */
+.player-visualizer {
+  transform: translateY(10px);
+}
