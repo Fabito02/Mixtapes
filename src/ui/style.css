@@ -292,6 +292,18 @@ bottom-sheet .queue-panel listview {
   background-color: transparent;
 }
 
+/* The view switcher moves out of AdwToolbarView and into the bottom
+   sheet's bottom bar on compact, which costs it the flattening Adwaita
+   applies to `toolbarview > .bottom-bar actionbar`. Left alone it paints
+   the actionbar's own headerbar background plus an `inset 0 1px` shade,
+   and that shade is the seam that shows up between the mini player and
+   the tabs. Paint the background here instead and drop the shade. */
+.sheet-bottom-bar actionbar > revealer > box {
+  background-color: @headerbar_bg_color;
+  box-shadow: none;
+  padding-top: 6px;
+}
+
 /* Reset color for context menu popovers. A popover parented to a row is
    a CSS child of it and inherits the row color.
 
