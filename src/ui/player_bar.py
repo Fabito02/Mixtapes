@@ -221,6 +221,7 @@ class PlayerBar(Gtk.Box):
         self.on_state_changed(self.player, self.player.get_state_string())
 
         self.is_compact = False
+        self._sheet_bar = False
 
         drag = Gtk.GestureDrag()
         drag.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
@@ -253,7 +254,16 @@ class PlayerBar(Gtk.Box):
 
     def set_compact(self, compact):
         self.is_compact = compact
+        # _responsive_tick stands down while compact, so anything it folded
+        # into the 3-dot popover at desktop widths would be stranded there
+        # (the like button, most visibly). Reset the width memo too, or the
+        # tick skips the frame we land back on a width it has already seen.
+        self._last_responsive_width = -1
         if compact:
+            for control in self._responsive_order():
+                self._set_control_location(control, inline=True)
+            self.overflow_btn.set_visible(False)
+
             self.add_css_class("compact")
             self.timings_label.set_visible(False)
             self.prev_btn.set_visible(False)
@@ -286,6 +296,22 @@ class PlayerBar(Gtk.Box):
             self.content_box.set_margin_bottom(10)
             self.content_box.set_spacing(10)
             self.controls_box.set_spacing(10)
+
+    def set_sheet_bar(self, enabled):
+        """Tell the bar it is now AdwBottomSheet's bottom bar. The sheet
+        opens on click and follows the finger on a pull up by itself, so
+        our tap and vertical-drag handlers stand down rather than race its
+        swipe tracker. Horizontal swipe-to-skip stays: the tracker only
+        claims drags that go vertical.
+
+        A full-width bottom bar is flush to both window edges, so Adwaita
+        squares off the sheet's top corners and the bar keeps the shape it
+        already has. The class is only there for the seek bar (see CSS)."""
+        self._sheet_bar = enabled
+        if enabled:
+            self.add_css_class("sheet-bar")
+        else:
+            self.remove_css_class("sheet-bar")
 
     def set_expanded(self, expanded):
         """Flip the expand button's chevron — down when the cover view
@@ -433,6 +459,13 @@ class PlayerBar(Gtk.Box):
         }
         .player-scale.compact {
             margin-top: -4px; /* Mobile: Pull even higher to remove perceived gap */
+        }
+        /* AdwBottomSheet clips its bottom bar to its own bounds, so the
+           negative margin above cut 3 of the seek bar's 4px away and left
+           it near-invisible and hard to grab. There is no gap to close
+           here anyway: the bar's top edge is the sheet's top edge. */
+        .player-bar.sheet-bar .player-scale.compact {
+            margin-top: 0px;
         }
         .player-scale trough {
             min-height: 4px; /* Slightly thicker */
@@ -667,10 +700,14 @@ class PlayerBar(Gtk.Box):
         return False
 
     def on_drag_update(self, gesture, offset_x, offset_y):
+        if self._sheet_bar:
+            return
         if self.is_compact and offset_y < -15:
             self.emit("expand-requested")
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
 
     def on_bar_tapped(self, gesture, n_press, x, y):
+        if self._sheet_bar:
+            return
         if self.is_compact:
             self.emit("expand-requested")

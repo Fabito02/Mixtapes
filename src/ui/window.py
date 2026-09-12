@@ -83,7 +83,8 @@ window.cover-bg-active .lyrics-split > .sidebar-pane {
 
 window.cover-bg-active bottom-sheet .player-drawer,
 window.cover-bg-active bottom-sheet .queue-panel,
-window.cover-bg-active bottom-sheet .player-bar {
+window.cover-bg-active bottom-sheet .player-bar,
+window.cover-bg-active .sheet-bottom-bar actionbar > revealer > box {
   background: none;
   background-color: transparent;
 }
@@ -413,6 +414,23 @@ class MainWindow(Adw.ApplicationWindow):
         self.player.connect("metadata-changed", self._on_player_metadata_sync)
 
         self.bottom_sheet.connect("notify::open", self._on_bottom_sheet_open_changed)
+
+        # The bottom bar is drawn over the content, not above it, so the
+        # content has to give back exactly that height.
+        # A binding keeps the margin in the same layout pass as the sheet's
+        # own measurement, so it tracks the reveal animation frame by frame.
+        self.bottom_sheet.bind_property(
+            "bottom-bar-height",
+            self.split_view,
+            "margin-bottom",
+            GObject.BindingFlags.SYNC_CREATE,
+        )
+
+        # Carries the player bar and the view switcher while compact.
+        # Both move in here so the sheet's swipe tracker owns the pull-up,
+        # with the bar still stacked above the tabs.
+        self.sheet_bottom_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.sheet_bottom_bar.add_css_class("sheet-bottom-bar")
 
         # Do NOT set sheet or add to stack yet, managed by breakpoint or expand request
         self.toast_overlay = Adw.ToastOverlay()
@@ -4198,6 +4216,39 @@ class MainWindow(Adw.ApplicationWindow):
         if not sheet.get_open() and hasattr(self, "player_bar"):
             self.player_bar.set_expanded(False)
 
+    def _attach_bottom_bar_to_sheet(self):
+        """Hand the player bar and view switcher to AdwBottomSheet as its
+        bottom bar, so the sheet drives the drawer itself: the drawer
+        tracks the finger on a pull up, snaps open or back, and the bar
+        cross-fades into it."""
+        if self.bottom_sheet.get_bottom_bar() is self.sheet_bottom_bar:
+            return
+
+        # AdwToolbarView wraps its bars in internal nodes, so get_parent()
+        # never points back at it. Remove from the container we know holds
+        # them instead.
+        for bar in (self.player_bar_revealer, self.view_switcher_bar):
+            self.root_content_view.remove(bar)
+            self.sheet_bottom_bar.append(bar)
+
+        self.bottom_sheet.set_bottom_bar(self.sheet_bottom_bar)
+        self.bottom_sheet.set_reveal_bottom_bar(True)
+        self.bottom_sheet.set_can_open(len(self.player.queue) > 0)
+        self.player_bar.set_sheet_bar(True)
+
+    def _detach_bottom_bar_from_sheet(self):
+        """Give both bars back to the toolbar view for desktop widths."""
+        if self.bottom_sheet.get_bottom_bar() is not self.sheet_bottom_bar:
+            return
+
+        self.bottom_sheet.set_bottom_bar(None)
+        self.bottom_sheet.set_can_open(True)
+        self.player_bar.set_sheet_bar(False)
+
+        for bar in (self.player_bar_revealer, self.view_switcher_bar):
+            self.sheet_bottom_bar.remove(bar)
+            self.root_content_view.add_bottom_bar(bar)
+
     def _on_mobile_breakpoint_apply(self, *args):
         if self._is_compact:
             return
@@ -4217,6 +4268,8 @@ class MainWindow(Adw.ApplicationWindow):
 
         if hasattr(self, "player_bar"):
             self.player_bar.set_compact(True)
+
+        self._attach_bottom_bar_to_sheet()
 
         if hasattr(self, "split_view"):
             self.split_view.set_show_sidebar(False)
@@ -4245,6 +4298,7 @@ class MainWindow(Adw.ApplicationWindow):
         if hasattr(self, "bottom_sheet"):
             self.bottom_sheet.set_open(False)
             self.bottom_sheet.set_sheet(None)
+            self._detach_bottom_bar_from_sheet()
 
         if hasattr(self, "split_view"):
             GLib.idle_add(self._restore_sidebar_state)
@@ -4304,6 +4358,10 @@ class MainWindow(Adw.ApplicationWindow):
             return
 
         self.player_bar_revealer.set_reveal_child(has_queue)
+        # The tab row keeps the bottom bar alive after the player bar
+        # collapses, so lock the gesture instead of letting a swipe there
+        # open an empty player.
+        self.bottom_sheet.set_can_open(has_queue or not self._is_compact)
 
         if not has_queue:
             if hasattr(self, "split_view") and self.split_view.get_show_sidebar():
