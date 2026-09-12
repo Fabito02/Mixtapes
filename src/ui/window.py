@@ -2228,7 +2228,7 @@ class MainWindow(Adw.ApplicationWindow):
         about.set_application_icon("com.pocoguy.Muse")
         about.set_application_name("Mixtapes")
         about.set_developer_name("POCOGuy")
-        about.set_version("2026.04.09-0")
+        about.set_version("2026.09.12-0")
         about.set_website("https://www.pocoguy.com/#!/mixtapes")
         about.set_copyright("© 2026 POCOGuy")
         about.set_license_type(Gtk.License.GPL_3_0)
